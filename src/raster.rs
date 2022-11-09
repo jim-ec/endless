@@ -5,8 +5,8 @@ use itertools::Itertools;
 
 use crate::util::perf;
 
-pub const WIDTH: usize = 400;
-pub const HEIGHT: usize = 100;
+pub const WIDTH: usize = 100;
+pub const HEIGHT: usize = 50;
 
 #[derive(Clone)]
 pub struct Raster {

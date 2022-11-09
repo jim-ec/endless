@@ -4,7 +4,7 @@ use crate::{
     raster::{Raster, HEIGHT, WIDTH},
     renderer,
     transform::Transform,
-    util::perf,
+    util::{perf, rgb},
 };
 use cgmath::{vec3, Matrix4, Vector3};
 use derive_setters::Setters;
@@ -12,38 +12,66 @@ use wgpu::util::DeviceExt;
 
 #[derive(Debug, Setters)]
 pub struct Mesh {
-    pub vertex_position_buffer: wgpu::Buffer,
+    pub vertex_buffer: wgpu::Buffer,
+    pub voxel_position_buffer: wgpu::Buffer,
+    pub voxel_color_buffer: wgpu::Buffer,
     pub bind_group: wgpu::BindGroup,
     pub uniform_buffer: wgpu::Buffer,
-    pub vertex_count: usize,
+    pub voxel_count: usize,
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 struct MeshUniforms {
     transform: Matrix4<f32>,
-    color: [f32; 3],
 }
 
 unsafe impl bytemuck::Pod for MeshUniforms {}
 unsafe impl bytemuck::Zeroable for MeshUniforms {}
 
 impl Mesh {
-    pub fn upload_uniforms(&self, queue: &wgpu::Queue, frame: Transform, color: [f32; 3]) {
-        queue.write_buffer(
-            &self.uniform_buffer,
-            0,
-            bytemuck::cast_slice(&[MeshUniforms {
-                transform: frame.matrix(),
-                color,
-            }]),
-        );
-    }
+    pub fn new(renderer: &renderer::Renderer, raster: &Raster) -> Mesh {
+        let mut vertices: Vec<Vector3<f32>> = Vec::new();
+        for [i, j, k] in CUBE_VERTEX_INDICES {
+            vertices.push(CUBE_VERTICES[i as usize]);
+            vertices.push(CUBE_VERTICES[j as usize]);
+            vertices.push(CUBE_VERTICES[k as usize]);
+        }
 
-    pub fn from_vertices(renderer: &renderer::Renderer, positions: &[Vector3<f32>]) -> Self {
-        let vertex_count = positions.len();
+        let mut positions: Vec<Vector3<f32>> = Vec::new();
+        let mut colors: Vec<Vector3<f32>> = Vec::new();
 
-        let vertex_position_buffer =
+        perf("Voxel mesh generation", || {
+            for x in 0..WIDTH {
+                for y in 0..WIDTH {
+                    for z in 0..HEIGHT {
+                        if raster[(x, y, z)] {
+                            positions.push(vec3(x as f32, y as f32, z as f32));
+                            colors.push(match z {
+                                0..=1 => vec3(0.2, 0.2, 1.0),
+                                2..=4 => rgb(194, 178, 128),
+                                _ => rgb(91, 135, 49),
+                            });
+                        }
+                    }
+                }
+            }
+        });
+
+        let vertex_buffer = renderer
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents: unsafe {
+                    std::slice::from_raw_parts(
+                        vertices.as_ptr() as *const u8,
+                        vertices.len() * std::mem::size_of::<Vector3<f32>>(),
+                    )
+                },
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+
+        let voxel_position_buffer =
             renderer
                 .device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -52,6 +80,20 @@ impl Mesh {
                         std::slice::from_raw_parts(
                             positions.as_ptr() as *const u8,
                             positions.len() * std::mem::size_of::<Vector3<f32>>(),
+                        )
+                    },
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
+
+        let voxel_color_buffer =
+            renderer
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: None,
+                    contents: unsafe {
+                        std::slice::from_raw_parts(
+                            colors.as_ptr() as *const u8,
+                            colors.len() * std::mem::size_of::<Vector3<f32>>(),
                         )
                     },
                     usage: wgpu::BufferUsages::VERTEX,
@@ -85,32 +127,23 @@ impl Mesh {
             });
 
         Self {
-            vertex_position_buffer,
+            vertex_buffer,
+            voxel_position_buffer,
+            voxel_color_buffer,
             bind_group,
             uniform_buffer,
-            vertex_count,
+            voxel_count: colors.len(),
         }
     }
 
-    pub fn new_voxels(renderer: &renderer::Renderer, raster: &Raster) -> Mesh {
-        let mut positions = vec![];
-        perf("Voxel mesh generation", || {
-            for x in 0..WIDTH {
-                for y in 0..WIDTH {
-                    for z in 0..HEIGHT {
-                        if raster[(x, y, z)] {
-                            let offset = vec3(x as f32, y as f32, z as f32);
-                            for [i, j, k] in CUBE_VERTEX_INDICES {
-                                positions.push(CUBE_VERTICES[i as usize] + offset);
-                                positions.push(CUBE_VERTICES[j as usize] + offset);
-                                positions.push(CUBE_VERTICES[k as usize] + offset);
-                            }
-                        }
-                    }
-                }
-            }
-        });
-        Mesh::from_vertices(renderer, &positions)
+    pub fn upload_uniforms(&self, queue: &wgpu::Queue, frame: Transform) {
+        queue.write_buffer(
+            &self.uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[MeshUniforms {
+                transform: frame.matrix(),
+            }]),
+        );
     }
 }
 

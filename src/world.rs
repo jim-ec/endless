@@ -9,7 +9,7 @@ use crate::{
 
 pub struct World {
     pub mesh: Mesh,
-    pub frame: Transform,
+    pub transform: Transform,
     pub debug_lines: DebugLines,
 }
 
@@ -30,10 +30,10 @@ impl World {
             n
         });
 
-        let mesh = Mesh::new_voxels(renderer, &raster.shell());
+        let mesh = Mesh::new(renderer, &raster.shell());
         World {
             mesh,
-            frame: Transform::default(),
+            transform: Transform::default(),
             debug_lines,
         }
     }
