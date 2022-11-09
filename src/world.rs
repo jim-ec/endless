@@ -1,11 +1,10 @@
 use std::time::Instant;
 
+use noise::{NoiseFn, Seedable};
+
 use crate::{
-    debug::DebugLines,
-    mesh::Mesh,
-    raster::{Raster, DIM},
-    renderer::Renderer,
-    transform::Transform,
+    debug::DebugLines, mesh::Mesh, raster::Raster, renderer::Renderer, transform::Transform,
+    util::rescale,
 };
 
 pub struct World {
@@ -18,20 +17,20 @@ impl World {
     pub fn new(renderer: &Renderer) -> World {
         let debug_lines = DebugLines::default();
 
-        let t0 = Instant::now();
         let mut raster = Raster::default();
 
-        raster.populate(|v| {
-            let x = v.x - (DIM / 2) as f64;
-            let y = v.y - (DIM / 2) as f64;
-            v.z <= x * x + y * y
+        let mut noise = noise::Fbm::new();
+        noise.frequency = 0.01;
+        let noise = noise::Turbulence::new(noise);
+
+        raster.populate_height(|v| {
+            let mut n = noise.get([v.x, v.y]);
+            n = rescale(n, -1.0..1.0, 0.0..1.0);
+            n -= 0.3;
+            n
         });
 
-        let t1 = Instant::now();
-        let dt = t1 - t0;
-        println!("Generation took {dt:?}");
-
-        let mesh = Mesh::new_voxels(renderer, &raster);
+        let mesh = Mesh::new_voxels(renderer, &raster.shell());
         World {
             mesh,
             frame: Transform::default(),

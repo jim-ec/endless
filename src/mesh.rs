@@ -1,7 +1,10 @@
+use std::time::Instant;
+
 use crate::{
-    raster::{Raster, DIM},
+    raster::{Raster, HEIGHT, WIDTH},
     renderer,
     transform::Transform,
+    util::perf,
 };
 use cgmath::{vec3, Matrix4, Vector3};
 use derive_setters::Setters;
@@ -91,20 +94,22 @@ impl Mesh {
 
     pub fn new_voxels(renderer: &renderer::Renderer, raster: &Raster) -> Mesh {
         let mut positions = vec![];
-        for z in 0..DIM {
-            for y in 0..DIM {
-                for x in 0..DIM {
-                    if raster.voxels[x][y][z] {
-                        let offset = vec3(x as f32, y as f32, z as f32);
-                        for [i, j, k] in CUBE_VERTEX_INDICES {
-                            positions.push(CUBE_VERTICES[i as usize] + offset);
-                            positions.push(CUBE_VERTICES[j as usize] + offset);
-                            positions.push(CUBE_VERTICES[k as usize] + offset);
+        perf("Voxel mesh generation", || {
+            for x in 0..WIDTH {
+                for y in 0..WIDTH {
+                    for z in 0..HEIGHT {
+                        if raster[(x, y, z)] {
+                            let offset = vec3(x as f32, y as f32, z as f32);
+                            for [i, j, k] in CUBE_VERTEX_INDICES {
+                                positions.push(CUBE_VERTICES[i as usize] + offset);
+                                positions.push(CUBE_VERTICES[j as usize] + offset);
+                                positions.push(CUBE_VERTICES[k as usize] + offset);
+                            }
                         }
                     }
                 }
             }
-        }
+        });
         Mesh::from_vertices(renderer, &positions)
     }
 }

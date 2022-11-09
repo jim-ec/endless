@@ -147,7 +147,11 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
                     .distance
                     .lerp(camera_target.distance, CAMERA_RESPONSIVNESS);
 
-                let geometry = [(&world.mesh, world.frame, DEFAULT_COLOR)];
+                let geometry = [(
+                    &world.mesh,
+                    world.frame,
+                    [91.0 / 255.0, 135.0 / 255.0, 49.0 / 255.0],
+                )];
 
                 match renderer.render(&camera, &geometry, &world.debug_lines) {
                     Ok(_) => {}
