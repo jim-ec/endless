@@ -30,7 +30,7 @@ unsafe impl bytemuck::Pod for MeshUniforms {}
 unsafe impl bytemuck::Zeroable for MeshUniforms {}
 
 impl Mesh {
-    pub fn new(renderer: &renderer::Renderer, raster: &Raster) -> Mesh {
+    pub fn new(renderer: &renderer::Renderer, raster: &Raster<bool>) -> Mesh {
         let mut vertices: Vec<Vector3<f32>> = Vec::new();
         for [i, j, k] in CUBE_VERTEX_INDICES {
             vertices.push(CUBE_VERTICES[i as usize]);

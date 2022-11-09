@@ -9,33 +9,33 @@ pub const WIDTH: usize = 100;
 pub const HEIGHT: usize = 50;
 
 #[derive(Clone)]
-pub struct Raster {
-    pub voxels: Vec<bool>,
+pub struct Raster<T> {
+    pub voxels: Vec<T>,
 }
 
-impl Index<(usize, usize, usize)> for Raster {
-    type Output = bool;
+impl<T> Index<(usize, usize, usize)> for Raster<T> {
+    type Output = T;
 
     fn index(&self, index: (usize, usize, usize)) -> &Self::Output {
         &self.voxels[index.0 * WIDTH * HEIGHT + index.1 * HEIGHT + index.2]
     }
 }
 
-impl IndexMut<(usize, usize, usize)> for Raster {
+impl<T> IndexMut<(usize, usize, usize)> for Raster<T> {
     fn index_mut(&mut self, index: (usize, usize, usize)) -> &mut Self::Output {
         &mut self.voxels[index.0 * WIDTH * HEIGHT + index.1 * HEIGHT + index.2]
     }
 }
 
-impl Default for Raster {
+impl<T: Default + Clone> Default for Raster<T> {
     fn default() -> Self {
         Self {
-            voxels: vec![false; WIDTH * WIDTH * HEIGHT],
+            voxels: vec![T::default(); WIDTH * WIDTH * HEIGHT],
         }
     }
 }
 
-impl Raster {
+impl Raster<bool> {
     pub fn populate<F: Fn(Vector3<f64>) -> bool>(&mut self, f: F) {
         perf("Volume Population", || {
             for (x, y, z) in Self::indices() {
