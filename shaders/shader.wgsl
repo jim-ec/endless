@@ -30,8 +30,8 @@ fn vs_main(@location(0) position: vec3<f32>) -> Fragment {
 
 @fragment
 fn fs_main(frag: Fragment) -> @location(0) vec4<f32> {
-    let ambient_light = 0.005;
-    let light_intensity = 2.0;
+    let ambient_light = 0.05;
+    let light_intensity = 1.0;
     
     let n = normalize(cross(dpdx(frag.position), dpdy(frag.position)));
     let v = normalize(frag.position - camera.pos.xyz / camera.pos.w);
