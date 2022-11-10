@@ -1,4 +1,7 @@
-use std::{ops::Range, time::Instant};
+use std::{
+    ops::{Div, MulAssign, Range, Sub, SubAssign},
+    time::Instant,
+};
 
 use cgmath::{vec3, Vector3};
 
@@ -7,11 +10,14 @@ pub fn perf<R, F: FnOnce() -> R>(label: &str, f: F) -> R {
     let r = f();
     let t1 = Instant::now();
     let dt = t1 - t0;
-    println!("{label} took {dt:.3?}");
+    println!("{label} took {dt:.2?}");
     r
 }
 
-pub fn rescale(mut x: f64, from: Range<f64>, to: Range<f64>) -> f64 {
+pub fn rescale<T>(mut x: T, from: Range<T>, to: Range<T>) -> T
+where
+    T: Copy + SubAssign + MulAssign + Sub<T, Output = T> + Div<T, Output = T>,
+{
     x -= from.start;
     x *= (to.end - to.start) / (from.end - from.start);
     x

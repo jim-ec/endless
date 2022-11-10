@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use crate::{
-    raster::{Raster, HEIGHT, WIDTH},
+    raster::{self, Raster, HEIGHT, WIDTH},
     renderer,
     transform::Transform,
     util::{perf, rgb},
@@ -30,7 +30,11 @@ unsafe impl bytemuck::Pod for MeshUniforms {}
 unsafe impl bytemuck::Zeroable for MeshUniforms {}
 
 impl Mesh {
-    pub fn new(renderer: &renderer::Renderer, raster: &Raster<bool>) -> Mesh {
+    pub fn new(
+        renderer: &renderer::Renderer,
+        raster: &Raster<bool>,
+        color: &Raster<Vector3<f32>>,
+    ) -> Mesh {
         let mut vertices: Vec<Vector3<f32>> = Vec::new();
         for [i, j, k] in CUBE_VERTEX_INDICES {
             vertices.push(CUBE_VERTICES[i as usize]);
@@ -41,22 +45,14 @@ impl Mesh {
         let mut positions: Vec<Vector3<f32>> = Vec::new();
         let mut colors: Vec<Vector3<f32>> = Vec::new();
 
-        perf("Voxel mesh generation", || {
-            for x in 0..WIDTH {
-                for y in 0..WIDTH {
-                    for z in 0..HEIGHT {
-                        if raster[(x, y, z)] {
-                            positions.push(vec3(x as f32, y as f32, z as f32));
-                            colors.push(match z {
-                                0..=1 => vec3(0.2, 0.2, 1.0),
-                                2..=4 => rgb(194, 178, 128),
-                                _ => rgb(91, 135, 49),
-                            });
-                        }
-                    }
-                }
+        for (x, y, z) in raster::indices() {
+            if raster[(x, y, z)] {
+                positions.push(vec3(x as f32, y as f32, z as f32));
+                colors.push(color[(x, y, z)]);
             }
-        });
+        }
+
+        println!("{} voxels", positions.len());
 
         let vertex_buffer = renderer
             .device

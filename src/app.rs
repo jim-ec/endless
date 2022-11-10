@@ -42,8 +42,8 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 DeviceEvent::MouseMotion { delta } => {
                     if dragging {
                         camera_target.pan(
-                            -0.001 * delta.0 * camera.distance,
-                            0.001 * delta.1 * camera.distance,
+                            -0.002 * delta.0 * camera.distance,
+                            0.002 * delta.1 * camera.distance,
                         );
                     }
                 }
