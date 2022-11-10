@@ -30,30 +30,28 @@ impl World {
             let mut n = noise.get([v.x, v.y]);
             n = rescale(n, -1.0..1.0, 0.0..1.0);
             n -= 0.3;
-            n
+            n.powf(1.5)
+
             // v.x / WIDTH as f64
         });
 
         // let colors = raster.colored();
+        // let colors = colors.map(|n| n.map(|x| rescale(x, -1.0..1.0, 0.0..1.0)));
 
         let env = raster.environment();
         let vis = raster.visibility(&env);
-        let colors = vis.normals();
-        // let colors = colors.map(|n| n.map(|x| rescale(x, -1.0..1.0, 0.0..1.0)));
+        let shell = raster.shell(&env);
 
-        // TODO: Debug coverage, i.e. number of visible faces
-        // let colors = vis.map(f)
+        let colors = vis
+            .normals()
+            // .map(|n| n.map(|x| rescale(x, -1.0..1.0, 0.0..1.0)))
+            .steepness()
+            .smooth(&shell, &env)
+            .smooth(&shell, &env)
+            .smooth(&shell, &env)
+            .grayscale();
 
-        // let colors = vis.map(|v| {
-        //     let count = v.bits().count_ones();
-        //     let x = count as f32 / 8.0;
-        //     vec3(x, x, x)
-        // });
-        // let colors = vis.coverage().grayscale();
-
-        // let colors = raster::elevation().grayscale();
-
-        let mesh = Mesh::new(renderer, &raster.shell(&env), &colors);
+        let mesh = Mesh::new(renderer, &raster, &colors);
         World {
             mesh,
             transform: Transform::default(),

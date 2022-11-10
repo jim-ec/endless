@@ -35,10 +35,10 @@ const Y_UP: Matrix4<f32> = Matrix4::from_cols(
 impl Camera {
     pub fn initial() -> Self {
         Self {
-            orbit: -0.1 * TAU,
+            orbit: -0.3 * TAU,
             tilt: 0.3 * 0.4 * TAU,
-            distance: 2.0 * WIDTH as f64,
-            origin: 0.5 * vec3(WIDTH as f64, WIDTH as f64, HEIGHT as f64),
+            distance: WIDTH as f64,
+            origin: 0.5 * vec3(WIDTH as f64, WIDTH as f64, 0.0),
             fovy: 60.0,
         }
     }

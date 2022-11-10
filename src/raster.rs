@@ -1,4 +1,7 @@
-use std::ops::{Add, Index, IndexMut};
+use std::{
+    fmt::Debug,
+    ops::{Add, Div, Index, IndexMut},
+};
 
 use bitflags::bitflags;
 use cgmath::{vec2, vec3, InnerSpace, Vector2, Vector3, Zero};
@@ -7,7 +10,7 @@ use itertools::Itertools;
 use crate::util::{perf, rescale, rgb};
 
 pub const WIDTH: usize = 150;
-pub const HEIGHT: usize = 50;
+pub const HEIGHT: usize = 100;
 
 pub const CAPACITY: usize = WIDTH * WIDTH * HEIGHT;
 
@@ -49,6 +52,16 @@ pub fn indices() -> impl Iterator<Item = (usize, usize, usize)> {
         .map(|((x, y), z)| (x, y, z))
 }
 
+impl<T> Raster<T> {
+    pub fn generate<F: Fn((usize, usize, usize)) -> T>(f: F) -> Self {
+        let mut voxels = Vec::with_capacity(CAPACITY);
+        for (x, y, z) in indices() {
+            voxels.push(f((x, y, z)));
+        }
+        Raster { voxels }
+    }
+}
+
 impl<T: Copy> Raster<T> {
     pub fn new(init: T) -> Self {
         Self {
@@ -56,15 +69,7 @@ impl<T: Copy> Raster<T> {
         }
     }
 
-    pub fn generate<F: Fn(usize, usize, usize) -> T>(f: F) -> Self {
-        let mut voxels = Vec::with_capacity(CAPACITY);
-        for (x, y, z) in indices() {
-            voxels.push(f(x, y, z));
-        }
-        Raster { voxels }
-    }
-
-    pub fn map<R: Copy, F: Fn(T) -> R>(&self, f: F) -> Raster<R> {
+    pub fn map<R, F: Fn(T) -> R>(&self, f: F) -> Raster<R> {
         let mut voxels = Vec::with_capacity(CAPACITY);
         for (x, y, z) in indices() {
             voxels.push(f(self[(x, y, z)]));
@@ -72,13 +77,10 @@ impl<T: Copy> Raster<T> {
         Raster { voxels }
     }
 
-    pub fn map_with_coordinate<R: Copy, F: Fn(T, usize, usize, usize) -> R>(
-        &self,
-        f: F,
-    ) -> Raster<R> {
+    pub fn map_with_coordinate<R, F: Fn(T, (usize, usize, usize)) -> R>(&self, f: F) -> Raster<R> {
         let mut voxels = Vec::with_capacity(CAPACITY);
         for (x, y, z) in indices() {
-            voxels.push(f(self[(x, y, z)], x, y, z));
+            voxels.push(f(self[(x, y, z)], (x, y, z)));
         }
         Raster { voxels }
     }
@@ -142,7 +144,7 @@ pub fn height_map<F: Fn(Vector2<f64>) -> f64>(f: F) -> Raster<bool> {
 }
 
 pub fn sediment_layers() -> Raster<Vector3<f32>> {
-    Raster::generate(|_, _, z| match z {
+    Raster::generate(|(_, _, z)| match z {
         0..=1 => vec3(0.2, 0.2, 1.0),
         2..=4 => rgb(194, 178, 128),
         _ => rgb(91, 135, 49),
@@ -150,13 +152,13 @@ pub fn sediment_layers() -> Raster<Vector3<f32>> {
 }
 
 pub fn elevation() -> Raster<f32> {
-    Raster::generate(|_, _, z| z as f32 / HEIGHT as f32)
+    Raster::generate(|(_, _, z)| z as f32 / HEIGHT as f32)
 }
 
 impl Raster<bool> {
     pub fn environment(&self) -> Raster<Env> {
         perf("Env", || {
-            self.map_with_coordinate(|b, x, y, z| {
+            self.map_with_coordinate(|b, (x, y, z)| {
                 let mut env = Env::empty();
 
                 let xp = x < WIDTH - 1;
@@ -200,21 +202,21 @@ impl Raster<bool> {
 
     pub fn shell(&self, env: &Raster<Env>) -> Raster<bool> {
         perf("Shell", || {
-            self.map_with_coordinate(|b, x, y, z| self[(x, y, z)] && !env[(x, y, z)].is_all())
+            self.map_with_coordinate(|b, c| self[c] && !env[c].is_all())
         })
     }
 
     pub fn visibility(&self, env: &Raster<Env>) -> Raster<Visibility> {
         perf("Visibility", || {
-            self.map_with_coordinate(|vis, x, y, z| {
+            self.map_with_coordinate(|vis, c| {
                 let mut vis = Visibility::empty();
-                let env = env[(x, y, z)];
+                let env = env[c];
                 vis.set(Visibility::XP, !env.contains(Env::PZZ));
                 vis.set(Visibility::XN, !env.contains(Env::NZZ));
                 vis.set(Visibility::YP, !env.contains(Env::ZPZ));
                 vis.set(Visibility::YN, !env.contains(Env::ZNZ));
                 vis.set(Visibility::ZP, !env.contains(Env::ZZP));
-                vis.set(Visibility::ZN, !env.contains(Env::ZZN));
+                // vis.set(Visibility::ZN, !env.contains(Env::ZZN));
                 vis
             })
         })
@@ -264,8 +266,64 @@ impl Raster<Visibility> {
 impl Raster<f32> {
     pub fn grayscale(&self) -> Raster<Vector3<f32>> {
         self.map(|f| {
-            // let f = f.powf(2.2);
+            let f = f.powf(2.2);
             vec3(f, f, f)
         })
+    }
+}
+
+impl<T: Copy + Add<Output = T> + Div<f32, Output = T> + Debug> Raster<T> {
+    pub fn smooth(&self, mask: &Raster<bool>, env: &Raster<Env>) -> Raster<T> {
+        self.map_with_coordinate(|mut v, c| {
+            let mut count: usize = 1;
+            let env = env[c];
+            for (e, o) in [
+                (Env::ZZP, (0, 0, 1)),
+                (Env::ZZN, (0, 0, -1)),
+                (Env::ZPZ, (0, 1, 0)),
+                (Env::ZPP, (0, 1, 1)),
+                (Env::ZPN, (0, 1, -1)),
+                (Env::ZNZ, (0, -1, 0)),
+                (Env::ZNP, (0, -1, 1)),
+                (Env::ZNN, (0, -1, -1)),
+                (Env::PZZ, (1, 0, 0)),
+                (Env::PZP, (1, 0, 1)),
+                (Env::PZN, (1, 0, -1)),
+                (Env::PPZ, (1, 1, 0)),
+                (Env::PPP, (1, 1, 1)),
+                (Env::PPN, (1, 1, -1)),
+                (Env::PNZ, (1, -1, 0)),
+                (Env::PNP, (1, -1, 1)),
+                (Env::PNN, (1, -1, -1)),
+                (Env::NZZ, (-1, 0, 0)),
+                (Env::NZP, (-1, 0, 1)),
+                (Env::NZN, (-1, 0, -1)),
+                (Env::NPZ, (-1, 1, 0)),
+                (Env::NPP, (-1, 1, 1)),
+                (Env::NPN, (-1, 1, -1)),
+                (Env::NNZ, (-1, -1, 0)),
+                (Env::NNP, (-1, -1, 1)),
+                (Env::NNN, (-1, -1, -1)),
+            ] {
+                if env.contains(e) {
+                    let co = (
+                        (c.0 as isize + o.0) as usize,
+                        (c.1 as isize + o.1) as usize,
+                        (c.2 as isize + o.2) as usize,
+                    );
+                    if mask[co] {
+                        v = v + self[co];
+                        count += 1;
+                    }
+                }
+            }
+            v / count as f32
+        })
+    }
+}
+
+impl Raster<Vector3<f32>> {
+    pub fn steepness(&self) -> Raster<f32> {
+        self.map(|n| n.dot(vec3(0.0, 0.0, 1.0)))
     }
 }
