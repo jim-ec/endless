@@ -9,7 +9,7 @@ use itertools::Itertools;
 
 use crate::util::{perf, rescale, rgb};
 
-pub const WIDTH: usize = 150;
+pub const WIDTH: usize = 400;
 pub const HEIGHT: usize = 100;
 
 pub const CAPACITY: usize = WIDTH * WIDTH * HEIGHT;
@@ -324,6 +324,6 @@ impl<T: Copy + Add<Output = T> + Div<f32, Output = T> + Debug> Raster<T> {
 
 impl Raster<Vector3<f32>> {
     pub fn steepness(&self) -> Raster<f32> {
-        self.map(|n| n.dot(vec3(0.0, 0.0, 1.0)))
+        self.map(|n| 1.0 - n.dot(vec3(0.0, 0.0, 1.0)))
     }
 }

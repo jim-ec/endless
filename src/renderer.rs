@@ -394,7 +394,7 @@ impl Renderer {
             command_buffers.push(self.render_entity(&view, mesh, transform));
         }
 
-        command_buffers.push(self.render_grid(&view));
+        // command_buffers.push(self.render_grid(&view));
 
         command_buffers.push(self.line_debugger.render(debug_lines, self, &view));
 

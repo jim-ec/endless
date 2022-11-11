@@ -9,7 +9,7 @@ use crate::{
     raster::{self, Raster, Visibility, WIDTH},
     renderer::Renderer,
     transform::Transform,
-    util::rescale,
+    util::{rescale, rgb},
 };
 
 pub struct World {
@@ -29,29 +29,55 @@ impl World {
         let raster = raster::height_map(|v| {
             let mut n = noise.get([v.x, v.y]);
             n = rescale(n, -1.0..1.0, 0.0..1.0);
-            n -= 0.3;
-            n.powf(1.5)
-
-            // v.x / WIDTH as f64
+            n = n.powf(3.0);
+            // n *= 2.0;
+            n -= 0.1;
+            n
         });
-
-        // let colors = raster.colored();
-        // let colors = colors.map(|n| n.map(|x| rescale(x, -1.0..1.0, 0.0..1.0)));
 
         let env = raster.environment();
         let vis = raster.visibility(&env);
-        let shell = raster.shell(&env);
+        let shell = raster
+            .shell(&env)
+            .map_with_coordinate(|b, (_, _, z)| b || z == 0);
 
-        let colors = vis
+        let steepness = vis
             .normals()
             // .map(|n| n.map(|x| rescale(x, -1.0..1.0, 0.0..1.0)))
             .steepness()
             .smooth(&shell, &env)
             .smooth(&shell, &env)
-            .smooth(&shell, &env)
-            .grayscale();
+            .smooth(&shell, &env);
 
-        let mesh = Mesh::new(renderer, &raster, &colors);
+        let elevation = raster::elevation();
+
+        let colors = steepness.map_with_coordinate(|s, (x, y, z)| {
+            let water = rgb(0, 50, 255);
+            let sand = rgb(194, 150, 80);
+            let grass = rgb(120, 135, 5);
+            let snow = rgb(200, 200, 200);
+            let rock = rgb(40, 40, 50);
+
+            if z == 0 {
+                return water;
+            } else if z <= 2 {
+                return sand;
+            }
+
+            let e = elevation[(x, y, z)];
+
+            if s > 0.7 {
+                return rock;
+            }
+
+            if e > 0.5 {
+                snow
+            } else {
+                grass
+            }
+        });
+
+        let mesh = Mesh::new(renderer, &shell, &colors);
         World {
             mesh,
             transform: Transform::default(),
