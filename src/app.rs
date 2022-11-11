@@ -87,30 +87,6 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
                     window.request_redraw();
                 }
 
-                WindowEvent::KeyboardInput {
-                    input:
-                        KeyboardInput {
-                            state: ElementState::Pressed,
-                            virtual_keycode: Some(VirtualKeyCode::Back),
-                            ..
-                        },
-                    ..
-                } => {
-                    // Move camera back to initial position while minimizing the path of travel
-                    let initial = camera::Camera::initial();
-                    let mut delta_orbit = initial.orbit - camera_target.orbit;
-                    delta_orbit %= TAU;
-                    if delta_orbit > TAU / 2.0 {
-                        delta_orbit -= TAU;
-                    } else if delta_orbit < -TAU / 2.0 {
-                        delta_orbit += TAU;
-                    }
-                    camera_target = camera::Camera {
-                        orbit: camera_target.orbit + delta_orbit,
-                        ..initial
-                    };
-                }
-
                 WindowEvent::MouseInput { state, button, .. } => match (button, state) {
                     (MouseButton::Left, ElementState::Pressed) => dragging = true,
                     (_, ElementState::Released) => dragging = false,
@@ -128,6 +104,22 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
                 WindowEvent::TouchpadMagnify { delta, .. } => {
                     camera_target.distance = camera_target.distance * (1.0 - delta);
+                }
+
+                WindowEvent::SmartMagnify { .. } => {
+                    // Move camera back to initial position while minimizing the path of travel
+                    let initial = camera::Camera::initial();
+                    let mut delta_orbit = initial.orbit - camera_target.orbit;
+                    delta_orbit %= TAU;
+                    if delta_orbit > TAU / 2.0 {
+                        delta_orbit -= TAU;
+                    } else if delta_orbit < -TAU / 2.0 {
+                        delta_orbit += TAU;
+                    }
+                    camera_target = camera::Camera {
+                        orbit: camera_target.orbit + delta_orbit,
+                        ..initial
+                    };
                 }
 
                 _ => {}
