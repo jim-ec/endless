@@ -1,7 +1,7 @@
 use cgmath::{Vector3, Zero};
 use itertools::Itertools;
 
-use crate::renderer;
+use crate::renderer::{self, DEPTH_FORMAT, SAMPLES};
 
 const MAX_VERTEX_COUNT: usize = 4096;
 
@@ -164,7 +164,13 @@ impl LineDebugger {
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
-            depth_stencil: None,
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::LessEqual,
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
             multiview: None,
         });
 
@@ -176,6 +182,7 @@ impl LineDebugger {
         debug_lines: &DebugLines,
         renderer: &renderer::Renderer,
         view: &wgpu::TextureView,
+        depth_texture_view: &wgpu::TextureView,
     ) -> wgpu::CommandBuffer {
         if debug_lines.vertices.len() >= MAX_VERTEX_COUNT {
             println!("Exceeded maximal debug line vertex count {MAX_VERTEX_COUNT}")
@@ -198,6 +205,14 @@ impl LineDebugger {
                     store: true,
                 },
             })],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: depth_texture_view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: true,
+                }),
+                stencil_ops: None,
+            }),
             ..Default::default()
         });
 

@@ -9,8 +9,8 @@ use itertools::Itertools;
 
 use crate::util::{perf, rescale, rgb};
 
-pub const WIDTH: usize = 400;
-pub const HEIGHT: usize = 100;
+pub const WIDTH: usize = 100;
+pub const HEIGHT: usize = 50;
 
 pub const CAPACITY: usize = WIDTH * WIDTH * HEIGHT;
 
@@ -53,7 +53,7 @@ pub fn indices() -> impl Iterator<Item = (usize, usize, usize)> {
 }
 
 impl<T> Raster<T> {
-    pub fn generate<F: Fn((usize, usize, usize)) -> T>(f: F) -> Self {
+    pub fn generate<F: FnMut((usize, usize, usize)) -> T>(mut f: F) -> Self {
         let mut voxels = Vec::with_capacity(CAPACITY);
         for (x, y, z) in indices() {
             voxels.push(f((x, y, z)));
@@ -77,7 +77,10 @@ impl<T: Copy> Raster<T> {
         Raster { voxels }
     }
 
-    pub fn map_with_coordinate<R, F: Fn(T, (usize, usize, usize)) -> R>(&self, f: F) -> Raster<R> {
+    pub fn map_with_coordinate<R, F: FnMut(T, (usize, usize, usize)) -> R>(
+        &self,
+        mut f: F,
+    ) -> Raster<R> {
         let mut voxels = Vec::with_capacity(CAPACITY);
         for (x, y, z) in indices() {
             voxels.push(f(self[(x, y, z)], (x, y, z)));
@@ -87,7 +90,7 @@ impl<T: Copy> Raster<T> {
 }
 
 bitflags! {
-    pub struct Visibility: u8 {
+    pub struct Vis: u8 {
         const XP = 1 << 0;
         const XN = 1 << 1;
         const YP = 1 << 2;
@@ -156,6 +159,7 @@ pub fn elevation() -> Raster<f32> {
 }
 
 impl Raster<bool> {
+    /// Compute the direct neighourhood of each voxel.
     pub fn environment(&self) -> Raster<Env> {
         perf("Env", || {
             self.map_with_coordinate(|b, (x, y, z)| {
@@ -206,44 +210,54 @@ impl Raster<bool> {
         })
     }
 
-    pub fn visibility(&self, env: &Raster<Env>) -> Raster<Visibility> {
+    /// Compute visible faces of each voxel i.e. faces that are not internal.
+    /// Faces at the raster boundary are not considered to be visible.
+    pub fn visibility(&self, env: &Raster<Env>) -> Raster<Vis> {
         perf("Visibility", || {
-            self.map_with_coordinate(|vis, c| {
-                let mut vis = Visibility::empty();
-                let env = env[c];
-                vis.set(Visibility::XP, !env.contains(Env::PZZ));
-                vis.set(Visibility::XN, !env.contains(Env::NZZ));
-                vis.set(Visibility::YP, !env.contains(Env::ZPZ));
-                vis.set(Visibility::YN, !env.contains(Env::ZNZ));
-                vis.set(Visibility::ZP, !env.contains(Env::ZZP));
-                // vis.set(Visibility::ZN, !env.contains(Env::ZZN));
+            self.map_with_coordinate(|vis, (x, y, z)| {
+                let mut vis = Vis::empty();
+                let env = env[(x, y, z)];
+
+                let xp = x < WIDTH - 1;
+                let xn = x > 0;
+                let yp = y < WIDTH - 1;
+                let yn = y > 0;
+                let zp = z < HEIGHT - 1;
+                let zn = z > 0;
+
+                vis.set(Vis::XP, xp && !env.contains(Env::PZZ));
+                vis.set(Vis::XN, xn && !env.contains(Env::NZZ));
+                vis.set(Vis::YP, yp && !env.contains(Env::ZPZ));
+                vis.set(Vis::YN, yn && !env.contains(Env::ZNZ));
+                vis.set(Vis::ZP, zp && !env.contains(Env::ZZP));
+                vis.set(Vis::ZN, zn && !env.contains(Env::ZZN));
                 vis
             })
         })
     }
 }
 
-impl Raster<Visibility> {
+impl Raster<Vis> {
     pub fn normals(&self) -> Raster<Vector3<f32>> {
         self.map(|vis| {
             let mut n = Vector3::zero();
 
-            if vis.contains(Visibility::XP) {
+            if vis.contains(Vis::XP) {
                 n.x += 1.0;
             }
-            if vis.contains(Visibility::XN) {
+            if vis.contains(Vis::XN) {
                 n.x -= 1.0;
             }
-            if vis.contains(Visibility::YP) {
+            if vis.contains(Vis::YP) {
                 n.y += 1.0;
             }
-            if vis.contains(Visibility::YN) {
+            if vis.contains(Vis::YN) {
                 n.y -= 1.0;
             }
-            if vis.contains(Visibility::ZP) {
+            if vis.contains(Vis::ZP) {
                 n.z += 1.0;
             }
-            if vis.contains(Visibility::ZN) {
+            if vis.contains(Vis::ZN) {
                 n.z -= 1.0;
             }
 

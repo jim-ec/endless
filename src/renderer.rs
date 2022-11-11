@@ -396,7 +396,12 @@ impl Renderer {
 
         // command_buffers.push(self.render_grid(&view));
 
-        command_buffers.push(self.line_debugger.render(debug_lines, self, &view));
+        command_buffers.push(self.line_debugger.render(
+            debug_lines,
+            self,
+            &view,
+            &self.depth_texture_view,
+        ));
 
         self.queue.submit(command_buffers);
 
