@@ -31,7 +31,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     out.clip_position = camera.proj * camera.view * position;
     out.position = position.xyz / position.w;
 
-    out.color = in.color;
+    out.color = clamp(in.color, vec3(0.0), vec3(1.0));
 
     return out;
 }
