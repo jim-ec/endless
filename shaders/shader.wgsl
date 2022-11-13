@@ -10,13 +10,15 @@ struct VoxelOut {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) position: vec3<f32>,
     @location(1) color: vec3<f32>,
+    @location(2) normal: vec3<f32>,
 }
 
 @vertex
 fn voxel_vertex(
     @location(0) vertex: vec3<f32>,
-    @location(1) position: vec3<f32>,
-    @location(2) color: vec3<f32>,
+    @location(1) normal: vec3<f32>,
+    @location(2) position: vec3<f32>,
+    @location(3) color: vec3<f32>,
 ) -> VoxelOut {
     var out: VoxelOut;
 
@@ -26,6 +28,8 @@ fn voxel_vertex(
 
     out.color = clamp(color, vec3(0.0), vec3(1.0));
 
+    out.normal = normal;
+
     return out;
 }
 
@@ -34,9 +38,8 @@ fn voxel_fragment(frag: VoxelOut) -> @location(0) vec4<f32> {
     let ambient_light = 0.05;
     let light_intensity = 1.0;
     
-    let n = normalize(cross(dpdx(frag.position), dpdy(frag.position)));
     let v = normalize(frag.position - camera.pos.xyz / camera.pos.w);
-    let nov = dot(n, v);
+    let nov = clamp(dot(frag.normal, v), 0.0, 1.0);
 
     let color = nov * light_intensity * frag.color + ambient_light;
     return vec4(color, 1.0);

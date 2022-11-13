@@ -12,6 +12,7 @@ use super::RenderPass;
 pub struct VoxelPass {
     pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
+    vertex_normal_buffer: wgpu::Buffer,
     voxel_position_buffer: wgpu::Buffer,
     voxel_color_buffer: wgpu::Buffer,
     voxel_count: usize,
@@ -24,10 +25,15 @@ impl VoxelPass {
         color: &Raster<Vector3<f32>>,
     ) -> VoxelPass {
         let mut vertices: Vec<Vector3<f32>> = Vec::new();
+        let mut vertex_normals: Vec<Vector3<f32>> = Vec::new();
         for [i, j, k] in CUBE_VERTEX_INDICES {
-            vertices.push(CUBE_VERTICES[i as usize]);
-            vertices.push(CUBE_VERTICES[j as usize]);
-            vertices.push(CUBE_VERTICES[k as usize]);
+            let vs = [
+                CUBE_VERTICES[i as usize],
+                CUBE_VERTICES[j as usize],
+                CUBE_VERTICES[k as usize],
+            ];
+            vertices.extend(vs);
+            vertex_normals.extend(std::iter::repeat((vs[2] - vs[0]).cross(vs[1] - vs[0])).take(3));
         }
 
         let mut positions: Vec<Vector3<f32>> = Vec::new();
@@ -54,6 +60,20 @@ impl VoxelPass {
                 },
                 usage: wgpu::BufferUsages::VERTEX,
             });
+
+        let vertex_normal_buffer =
+            renderer
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: None,
+                    contents: unsafe {
+                        std::slice::from_raw_parts(
+                            vertex_normals.as_ptr() as *const u8,
+                            vertex_normals.len() * std::mem::size_of::<Vector3<f32>>(),
+                        )
+                    },
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
 
         let voxel_position_buffer =
             renderer
@@ -110,7 +130,7 @@ impl VoxelPass {
                         wgpu::VertexBufferLayout {
                             array_stride: std::mem::size_of::<Vector3<f32>>()
                                 as wgpu::BufferAddress,
-                            step_mode: wgpu::VertexStepMode::Instance,
+                            step_mode: wgpu::VertexStepMode::Vertex,
                             attributes: &[wgpu::VertexAttribute {
                                 offset: 0,
                                 shader_location: 1,
@@ -124,6 +144,16 @@ impl VoxelPass {
                             attributes: &[wgpu::VertexAttribute {
                                 offset: 0,
                                 shader_location: 2,
+                                format: wgpu::VertexFormat::Float32x4,
+                            }],
+                        },
+                        wgpu::VertexBufferLayout {
+                            array_stride: std::mem::size_of::<Vector3<f32>>()
+                                as wgpu::BufferAddress,
+                            step_mode: wgpu::VertexStepMode::Instance,
+                            attributes: &[wgpu::VertexAttribute {
+                                offset: 0,
+                                shader_location: 3,
                                 format: wgpu::VertexFormat::Float32x4,
                             }],
                         },
@@ -165,6 +195,7 @@ impl VoxelPass {
         Self {
             pipeline,
             vertex_buffer,
+            vertex_normal_buffer,
             voxel_position_buffer,
             voxel_color_buffer,
             voxel_count: colors.len(),
@@ -216,8 +247,9 @@ impl RenderPass for VoxelPass {
         render_pass.set_bind_group(0, bind_group, &[]);
 
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-        render_pass.set_vertex_buffer(1, self.voxel_position_buffer.slice(..));
-        render_pass.set_vertex_buffer(2, self.voxel_color_buffer.slice(..));
+        render_pass.set_vertex_buffer(1, self.vertex_normal_buffer.slice(..));
+        render_pass.set_vertex_buffer(2, self.voxel_position_buffer.slice(..));
+        render_pass.set_vertex_buffer(3, self.voxel_color_buffer.slice(..));
         render_pass.draw(0..3 * 12, 0..self.voxel_count as u32);
     }
 }
