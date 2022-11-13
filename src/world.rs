@@ -3,7 +3,7 @@ use noise::NoiseFn;
 
 use crate::{
     raster::{self, HEIGHT, WIDTH},
-    render_pass::{line_pass::LinePass, voxel_pass::VoxelPass},
+    render_pass::{line_pass::LinePass, voxel_pass::VoxelPass, water_pass::WaterPass, RenderPass},
     renderer::Renderer,
     util::{rescale, rgb},
 };
@@ -11,6 +11,7 @@ use crate::{
 pub struct World {
     pub voxel_pass: VoxelPass,
     pub line_pass: LinePass,
+    pub water_pass: WaterPass,
 }
 
 impl World {
@@ -115,6 +116,7 @@ impl World {
                     .copied(),
                 ],
             ),
+            water_pass: WaterPass::new(renderer),
         }
     }
 }

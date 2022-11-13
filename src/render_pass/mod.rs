@@ -2,6 +2,7 @@
 
 pub mod line_pass;
 pub mod voxel_pass;
+pub mod water_pass;
 
 pub trait RenderPass {
     fn render(
