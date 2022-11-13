@@ -7,7 +7,7 @@ use bitflags::bitflags;
 use cgmath::{vec2, vec3, InnerSpace, Vector2, Vector3, Zero};
 use itertools::Itertools;
 
-use crate::util::{perf, rescale, rgb};
+use crate::util::perf;
 
 pub const WIDTH: usize = 100;
 pub const HEIGHT: usize = 50;
@@ -47,7 +47,7 @@ impl<T: Default + Clone> Default for Raster<T> {
 
 pub fn indices() -> impl Iterator<Item = (usize, usize, usize)> {
     (0..WIDTH)
-        .cartesian_product((0..WIDTH))
+        .cartesian_product(0..WIDTH)
         .cartesian_product(0..HEIGHT)
         .map(|((x, y), z)| (x, y, z))
 }
@@ -63,12 +63,6 @@ impl<T> Raster<T> {
 }
 
 impl<T: Copy> Raster<T> {
-    pub fn new(init: T) -> Self {
-        Self {
-            voxels: vec![init; CAPACITY],
-        }
-    }
-
     pub fn map<R, F: Fn(T) -> R>(&self, f: F) -> Raster<R> {
         let mut voxels = Vec::with_capacity(CAPACITY);
         for (x, y, z) in indices() {
@@ -135,7 +129,7 @@ bitflags! {
 pub fn height_map<F: Fn(Vector2<f64>) -> f64>(f: F) -> Raster<bool> {
     let mut voxels = Vec::with_capacity(CAPACITY);
 
-    for (x, y) in (0..WIDTH).cartesian_product((0..WIDTH)) {
+    for (x, y) in (0..WIDTH).cartesian_product(0..WIDTH) {
         let position = vec2(x as f64 + 0.5, y as f64 + 0.5);
 
         let h = (f(position).clamp(0.0, 1.0) * HEIGHT as f64) as usize;
@@ -146,14 +140,6 @@ pub fn height_map<F: Fn(Vector2<f64>) -> f64>(f: F) -> Raster<bool> {
     Raster { voxels }
 }
 
-pub fn sediment_layers() -> Raster<Vector3<f32>> {
-    Raster::generate(|(_, _, z)| match z {
-        0..=1 => vec3(0.2, 0.2, 1.0),
-        2..=4 => rgb(194, 178, 128),
-        _ => rgb(91, 135, 49),
-    })
-}
-
 pub fn elevation() -> Raster<f32> {
     Raster::generate(|(_, _, z)| z as f32 / HEIGHT as f32)
 }
@@ -162,7 +148,7 @@ impl Raster<bool> {
     /// Compute the direct neighourhood of each voxel.
     pub fn environment(&self) -> Raster<Env> {
         perf("Env", || {
-            self.map_with_coordinate(|b, (x, y, z)| {
+            self.map_with_coordinate(|set, (x, y, z)| {
                 let mut env = Env::empty();
 
                 let xp = x < WIDTH - 1;
@@ -172,7 +158,7 @@ impl Raster<bool> {
                 let zp = z < HEIGHT - 1;
                 let zn = z > 0;
 
-                env.set(Env::ZZZ, self[(x, y, z)]);
+                env.set(Env::ZZZ, set);
                 env.set(Env::ZZP, zp && self[(x, y, z + 1)]);
                 env.set(Env::ZZN, zn && self[(x, y, z - 1)]);
                 env.set(Env::ZPZ, yp && self[(x, y + 1, z)]);
@@ -206,17 +192,18 @@ impl Raster<bool> {
 
     pub fn shell(&self, env: &Raster<Env>) -> Raster<bool> {
         perf("Shell", || {
-            self.map_with_coordinate(|b, c| self[c] && !env[c].is_all())
+            self.map_with_coordinate(|set, c| set && !env[c].is_all())
         })
     }
+}
 
+impl Raster<Env> {
     /// Compute visible faces of each voxel i.e. faces that are not internal.
     /// Faces at the raster boundary are not considered to be visible.
-    pub fn visibility(&self, env: &Raster<Env>) -> Raster<Vis> {
+    pub fn visibility(&self) -> Raster<Vis> {
         perf("Visibility", || {
-            self.map_with_coordinate(|vis, (x, y, z)| {
+            self.map_with_coordinate(|env, (x, y, z)| {
                 let mut vis = Vis::empty();
-                let env = env[(x, y, z)];
 
                 let xp = x < WIDTH - 1;
                 let xn = x > 0;

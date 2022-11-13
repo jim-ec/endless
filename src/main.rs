@@ -2,9 +2,8 @@
 
 mod app;
 mod camera;
-mod debug;
-mod mesh;
 mod raster;
+mod render_pass;
 mod renderer;
 mod transform;
 mod util;

@@ -9,11 +9,14 @@ use winit::{
     window::WindowBuilder,
 };
 
-use crate::{camera, renderer, world};
+use crate::{
+    camera,
+    render_pass::{line_pass::LinePass, RenderPass},
+    renderer, world,
+};
 
 pub const CAMERA_RESPONSIVNESS: f64 = 0.5;
 pub const FRAME_TIME: f64 = 1.0 / 60.0;
-pub const DEFAULT_COLOR: [f32; 3] = [0.4; 3];
 
 pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
@@ -128,8 +131,6 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
             Event::RedrawRequested(..) => {
                 last_render_time = Instant::now();
 
-                world.integrate();
-
                 camera.orbit = camera.orbit.lerp(camera_target.orbit, CAMERA_RESPONSIVNESS);
                 camera.origin = camera
                     .origin
@@ -139,9 +140,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
                     .distance
                     .lerp(camera_target.distance, CAMERA_RESPONSIVNESS);
 
-                let geometry = [(&world.mesh, world.transform)];
-
-                match renderer.render(&camera, &geometry, &world.debug_lines) {
+                match renderer.render(&camera, &[&world.voxel_pass, &world.line_pass]) {
                     Ok(_) => {}
                     Err(wgpu::SurfaceError::Lost) => renderer.resize(renderer.size),
                     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,

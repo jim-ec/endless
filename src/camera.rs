@@ -2,7 +2,7 @@ use std::f64::consts::TAU;
 
 use cgmath::{vec3, Matrix4, Quaternion, Rotation3, SquareMatrix, Vector3, Vector4};
 
-use crate::raster::{HEIGHT, WIDTH};
+use crate::raster::WIDTH;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Camera {

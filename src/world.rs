@@ -1,27 +1,20 @@
-use std::time::Instant;
-
-use cgmath::{vec3, InnerSpace, MetricSpace, Vector3};
-use noise::{NoiseFn, Seedable};
+use cgmath::{vec3, Vector3, Zero};
+use noise::NoiseFn;
 
 use crate::{
-    debug::DebugLines,
-    mesh::Mesh,
-    raster::{self, Raster, Vis, HEIGHT, WIDTH},
+    raster::{self, HEIGHT, WIDTH},
+    render_pass::{line_pass::LinePass, voxel_pass::VoxelPass},
     renderer::Renderer,
-    transform::Transform,
     util::{rescale, rgb},
 };
 
 pub struct World {
-    pub mesh: Mesh,
-    pub transform: Transform,
-    pub debug_lines: DebugLines,
+    pub voxel_pass: VoxelPass,
+    pub line_pass: LinePass,
 }
 
 impl World {
     pub fn new(renderer: &Renderer) -> World {
-        let mut debug_lines = DebugLines::default();
-
         let mut noise = noise::Fbm::new();
         noise.frequency = 0.01;
         let noise = noise::Turbulence::new(noise);
@@ -31,16 +24,14 @@ impl World {
             n = rescale(n, -1.0..1.0, 0.0..1.0);
             n = n.powf(3.0);
             n -= 0.1;
-            n.max(1.0 / HEIGHT as f64)
+            n
         });
 
         let env = raster.environment();
 
-        let shell = raster
-            .shell(&env)
-            .map_with_coordinate(|b, (_, _, z)| b || z == 0);
+        let shell = raster.shell(&env);
 
-        let vis = raster.visibility(&env);
+        let vis = env.visibility();
         let normal = vis.normals();
         let steepness = normal
             .steepness()
@@ -50,15 +41,12 @@ impl World {
         let elevation = raster::elevation();
 
         let color = steepness.map_with_coordinate(|s, (x, y, z)| {
-            let water = rgb(0, 50, 255);
             let sand = rgb(194, 150, 80);
             let grass = rgb(120, 135, 5);
             let snow = rgb(200, 200, 200);
             let rock = rgb(40, 40, 50);
 
-            if z == 0 {
-                return water;
-            } else if z <= 2 {
+            if z <= 1 {
                 return sand;
             }
 
@@ -76,12 +64,57 @@ impl World {
         });
 
         World {
-            mesh: Mesh::new(renderer, &shell, &color),
-            transform: Transform::default(),
-            debug_lines,
+            voxel_pass: VoxelPass::new(renderer, &shell, &color),
+            line_pass: LinePass::new(
+                renderer,
+                [
+                    [
+                        vec3(0.0, 0.0, 0.0),
+                        vec3(WIDTH as f32, 0.0, 0.0),
+                        vec3(WIDTH as f32, WIDTH as f32, 0.0),
+                        vec3(0.0, WIDTH as f32, 0.0),
+                        vec3(0.0, 0.0, 0.0),
+                    ]
+                    .as_slice()
+                    .into_iter()
+                    .copied(),
+                    [
+                        vec3(0.0, 0.0, HEIGHT as f32),
+                        vec3(WIDTH as f32, 0.0, HEIGHT as f32),
+                        vec3(WIDTH as f32, WIDTH as f32, HEIGHT as f32),
+                        vec3(0.0, WIDTH as f32, HEIGHT as f32),
+                        vec3(0.0, 0.0, HEIGHT as f32),
+                    ]
+                    .as_slice()
+                    .into_iter()
+                    .copied(),
+                    [vec3(0.0, 0.0, 0.0), vec3(0.0, 0.0, HEIGHT as f32)]
+                        .as_slice()
+                        .into_iter()
+                        .copied(),
+                    [
+                        vec3(WIDTH as f32, 0.0, 0.0),
+                        vec3(WIDTH as f32, 0.0, HEIGHT as f32),
+                    ]
+                    .as_slice()
+                    .into_iter()
+                    .copied(),
+                    [
+                        vec3(0.0, WIDTH as f32, 0.0),
+                        vec3(0.0, WIDTH as f32, HEIGHT as f32),
+                    ]
+                    .as_slice()
+                    .into_iter()
+                    .copied(),
+                    [
+                        vec3(WIDTH as f32, WIDTH as f32, 0.0),
+                        vec3(WIDTH as f32, WIDTH as f32, HEIGHT as f32),
+                    ]
+                    .as_slice()
+                    .into_iter()
+                    .copied(),
+                ],
+            ),
         }
     }
-
-    #[allow(unused)]
-    pub fn integrate(&mut self) {}
 }

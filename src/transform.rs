@@ -25,7 +25,6 @@ impl Transform {
         m.cast().unwrap()
     }
 
-    #[allow(dead_code)]
     pub fn inverse(&self) -> Transform {
         let inverse_orientation = self.rotation.conjugate();
         let inverse_position = inverse_orientation * -self.position;
