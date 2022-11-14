@@ -64,7 +64,7 @@ impl Camera {
 
         let pos = view.invert().unwrap() * Vector4::new(0.0, 0.0, 0.0, 1.0);
 
-        let proj = perspective_matrix(f32::to_radians(60.0), aspect, 0.01, None) * Y_UP;
+        let proj = perspective_matrix(f32::to_radians(60.0), aspect, 0.1, None) * Y_UP;
 
         CameraUniforms {
             view: view.cast().unwrap(),
