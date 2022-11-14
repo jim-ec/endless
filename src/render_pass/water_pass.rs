@@ -1,5 +1,5 @@
 use crate::{
-    raster::WIDTH,
+    raster::{WATER_LEVEL, WIDTH},
     renderer::{self, DEPTH_FORMAT, SAMPLES},
 };
 use cgmath::{vec3, Vector3};
@@ -17,10 +17,10 @@ pub struct WaterPass {
 impl WaterPass {
     pub fn new(renderer: &renderer::Renderer) -> WaterPass {
         let vertices: &[Vector3<f32>] = &[
-            vec3(0.0, 0.0, 0.0),
-            vec3(WIDTH as f32, 0.0, 0.0),
-            vec3(0.0, WIDTH as f32, 0.0),
-            vec3(WIDTH as f32, WIDTH as f32, 0.0),
+            vec3(0.0, 0.0, WATER_LEVEL as f32 - 0.1),
+            vec3(WIDTH as f32, 0.0, WATER_LEVEL as f32 - 0.1),
+            vec3(0.0, WIDTH as f32, WATER_LEVEL as f32 - 0.1),
+            vec3(WIDTH as f32, WIDTH as f32, WATER_LEVEL as f32 - 0.1),
         ];
 
         let vertex_buffer = renderer
@@ -64,7 +64,7 @@ impl WaterPass {
                     entry_point: "water_fragment",
                     targets: &[Some(wgpu::ColorTargetState {
                         format: renderer.swapchain_format,
-                        blend: Some(wgpu::BlendState::REPLACE),
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                         write_mask: wgpu::ColorWrites::ALL,
                     })],
                 }),

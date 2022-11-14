@@ -25,6 +25,7 @@ impl World {
             n = rescale(n, -1.0..1.0, 0.0..1.0);
             n = n.powf(3.0);
             n -= 0.1;
+            n *= 2.0;
             n
         });
 
@@ -47,7 +48,7 @@ impl World {
             let snow = rgb(200, 200, 200);
             let rock = rgb(40, 40, 50);
 
-            if z <= 1 {
+            if z <= 3 {
                 return sand;
             }
 
