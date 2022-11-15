@@ -5,7 +5,7 @@ use crate::{
     raster::{self, HEIGHT, WIDTH},
     render_pass::{line_pass::LinePass, voxel_pass::VoxelPass, water_pass::WaterPass, RenderPass},
     renderer::Renderer,
-    util::{rescale, rgb},
+    util::{perf, rescale, rgb},
 };
 
 pub struct World {
@@ -17,7 +17,7 @@ pub struct World {
 impl World {
     pub fn new(renderer: &Renderer) -> World {
         let mut noise = noise::Fbm::new();
-        noise.frequency = 0.01;
+        noise.frequency = 0.01 / 8.0;
         let noise = noise::Turbulence::new(noise);
 
         let raster = raster::height_map(|v| {
@@ -42,13 +42,13 @@ impl World {
             .smooth(&shell, &env);
         let elevation = raster::elevation();
 
-        let color = steepness.map_with_coordinate(|s, (x, y, z)| {
+        let color = steepness.map_with_coordinate("Color", |s, (x, y, z)| {
             let sand = rgb(194, 150, 80);
             let grass = rgb(120, 135, 5);
             let snow = rgb(200, 200, 200);
             let rock = rgb(40, 40, 50);
 
-            if z <= 3 {
+            if z <= 10 {
                 return sand;
             }
 
