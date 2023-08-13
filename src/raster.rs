@@ -9,9 +9,9 @@ use itertools::Itertools;
 
 use crate::util::perf;
 
-pub const WIDTH: usize = 800;
-pub const HEIGHT: usize = 200;
-pub const WATER_LEVEL: usize = 8;
+pub const WIDTH: usize = 100;
+pub const HEIGHT: usize = 50;
+pub const WATER_LEVEL: usize = 2;
 
 pub const CAPACITY: usize = WIDTH * WIDTH * HEIGHT;
 

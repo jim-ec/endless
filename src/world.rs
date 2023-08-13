@@ -17,7 +17,7 @@ pub struct World {
 impl World {
     pub fn new(renderer: &Renderer) -> World {
         let mut noise = noise::Fbm::new();
-        noise.frequency = 0.01 / 8.0;
+        noise.frequency = 0.01;
         let noise = noise::Turbulence::new(noise);
 
         let raster = raster::height_map(|v| {
@@ -48,7 +48,7 @@ impl World {
             let snow = rgb(200, 200, 200);
             let rock = rgb(40, 40, 50);
 
-            if z <= 10 {
+            if z <= 2 {
                 return sand;
             }
 
