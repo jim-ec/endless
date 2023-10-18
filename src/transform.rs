@@ -1,55 +1,56 @@
 use cgmath::{Matrix4, Quaternion, Vector3, Zero};
 use derive_setters::Setters;
 
+/// A symmetry in Euclidean space.
 #[derive(Debug, Clone, Copy, Setters)]
-pub struct Transform {
-    pub position: Vector3<f64>,
+pub struct Symmetry {
+    pub translation: Vector3<f64>,
     pub rotation: Quaternion<f64>,
 }
 
-impl Default for Transform {
+impl Default for Symmetry {
     fn default() -> Self {
-        Transform {
-            position: Vector3::zero(),
+        Symmetry {
+            translation: Vector3::zero(),
             rotation: Quaternion::new(1.0, 0.0, 0.0, 0.0),
         }
     }
 }
 
-impl Transform {
+impl Symmetry {
     pub fn matrix(&self) -> Matrix4<f32> {
         let mut m: Matrix4<f64> = self.rotation.into();
-        m.w.x = self.position.x;
-        m.w.y = self.position.y;
-        m.w.z = self.position.z;
+        m.w.x = self.translation.x;
+        m.w.y = self.translation.y;
+        m.w.z = self.translation.z;
         m.cast().unwrap()
     }
 
-    pub fn inverse(&self) -> Transform {
+    pub fn inverse(&self) -> Symmetry {
         let inverse_orientation = self.rotation.conjugate();
-        let inverse_position = inverse_orientation * -self.position;
-        Transform {
-            position: inverse_position,
+        let inverse_position = inverse_orientation * -self.translation;
+        Symmetry {
+            translation: inverse_position,
             rotation: inverse_orientation,
         }
     }
 }
 
-impl std::ops::Mul<Vector3<f64>> for Transform {
+impl std::ops::Mul<Vector3<f64>> for Symmetry {
     type Output = Vector3<f64>;
 
     fn mul(self, rhs: Vector3<f64>) -> Self::Output {
-        self.rotation * rhs + self.position
+        self.rotation * rhs + self.translation
     }
 }
 
-/// The resulting frame first applies `other` and then `self`.
-impl std::ops::Mul for Transform {
-    type Output = Transform;
+/// Compose the right symmetry with the left symmetry.
+impl std::ops::Mul for Symmetry {
+    type Output = Symmetry;
 
-    fn mul(self, rhs: Transform) -> Self::Output {
-        Transform {
-            position: self.position + self.rotation * rhs.position,
+    fn mul(self, rhs: Symmetry) -> Self::Output {
+        Symmetry {
+            translation: self.translation + self.rotation * rhs.translation,
             rotation: self.rotation * rhs.rotation,
         }
     }
