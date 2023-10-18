@@ -92,6 +92,7 @@ impl<T: Copy> Raster<T> {
 }
 
 bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct Vis: u8 {
         const XP = 1 << 0;
         const XN = 1 << 1;
@@ -103,6 +104,7 @@ bitflags! {
 }
 
 bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct Env: u32 {
         const ZZZ = 1 << 0;
         const ZZP = 1 << 1;

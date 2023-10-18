@@ -16,16 +16,16 @@ pub struct World {
 
 impl World {
     pub fn new(renderer: &Renderer) -> World {
-        let mut noise = noise::Fbm::new();
+        use noise::{Fbm, Perlin, Turbulence};
+        let mut noise = Fbm::<Perlin>::new(0);
         noise.frequency = 0.01;
-        let noise = noise::Turbulence::new(noise);
+        let noise = Turbulence::<_, Perlin>::new(noise);
 
         let raster = raster::height_map(|v| {
             let mut n = noise.get([v.x - 10.0, v.y - 10.0]);
             n = rescale(n, -1.0..1.0, 0.0..1.0);
-            n = n.powf(3.0);
+            n = n.powf(2.0);
             n -= 0.1;
-            n *= 2.5;
             n
         });
 
