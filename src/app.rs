@@ -9,13 +9,7 @@ use winit::{
     window::WindowBuilder,
 };
 
-use crate::{
-    camera,
-    render_pass::{line_pass::LinePass, RenderPass},
-    renderer,
-    util::perf,
-    world,
-};
+use crate::{camera, renderer, util::perf, world};
 
 pub const CAMERA_RESPONSIVNESS: f64 = 0.5;
 pub const FRAME_TIME: f64 = 1.0 / 60.0;
@@ -31,7 +25,7 @@ pub async fn run() {
         .unwrap();
 
     let mut renderer = renderer::Renderer::new(&window).await;
-    let mut world = perf("World generation", || world::World::new(&renderer));
+    let world = perf("World generation", || world::World::new(&renderer));
 
     let mut dragging = false;
     let mut camera = camera::Camera::initial();

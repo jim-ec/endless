@@ -1,7 +1,4 @@
-use std::{
-    fmt::Debug,
-    ops::{Add, Div, Index, IndexMut},
-};
+use std::fmt::Debug;
 
 use bitflags::bitflags;
 use cgmath::{vec2, vec3, InnerSpace, Vector2, Vector3, Zero};
@@ -24,7 +21,7 @@ fn linear(x: usize, y: usize, z: usize) -> usize {
     x * WIDTH * HEIGHT + y * HEIGHT + z
 }
 
-impl<T> Index<(usize, usize, usize)> for Raster<T> {
+impl<T> std::ops::Index<(usize, usize, usize)> for Raster<T> {
     type Output = T;
 
     fn index(&self, index: (usize, usize, usize)) -> &Self::Output {
@@ -32,7 +29,7 @@ impl<T> Index<(usize, usize, usize)> for Raster<T> {
     }
 }
 
-impl<T> IndexMut<(usize, usize, usize)> for Raster<T> {
+impl<T> std::ops::IndexMut<(usize, usize, usize)> for Raster<T> {
     fn index_mut(&mut self, index: (usize, usize, usize)) -> &mut Self::Output {
         &mut self.voxels[linear(index.0, index.1, index.2)]
     }

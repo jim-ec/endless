@@ -1,11 +1,11 @@
-use cgmath::{vec3, Vector3, Zero};
+use cgmath::vec3;
 use noise::NoiseFn;
 
 use crate::{
     raster::{self, HEIGHT, WIDTH},
-    render_pass::{line_pass::LinePass, voxel_pass::VoxelPass, water_pass::WaterPass, RenderPass},
+    render_pass::{line_pass::LinePass, voxel_pass::VoxelPass, water_pass::WaterPass},
     renderer::Renderer,
-    util::{perf, rescale, rgb},
+    util::{rescale, rgb},
 };
 
 pub struct World {
