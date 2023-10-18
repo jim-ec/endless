@@ -1,10 +1,10 @@
 [package]
-name = "constraint_solver"
+name = "voxels"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-itertools = "0.10.3"
+itertools = "0.11.0"
 wgpu = "0.13"
 env_logger = "0.9"
 log = "0.4"
@@ -14,7 +14,6 @@ cgmath = "0.18"
 lerp = { version = "0.4.0", features = ["derive"] }
 rand = "0.8.5"
 noise = "0.7.0"
-common_macros = "0.1.1"
 palette = "0.6.1"
 stavec = { git = "https://github.com/agerasev/stavec", branch = "master" }
 winit = { git = "https://github.com/jim-eckerlein/winit" }
