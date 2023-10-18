@@ -1,5 +1,7 @@
 #![allow(unused)]
 
+use pollster::FutureExt;
+
 mod app;
 mod camera;
 mod raster;
@@ -9,7 +11,6 @@ mod transform;
 mod util;
 mod world;
 
-#[async_std::main]
-async fn main() {
-    app::run().await
+fn main() {
+    app::run().block_on()
 }

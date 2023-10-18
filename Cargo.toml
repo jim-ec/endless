@@ -8,7 +8,6 @@ itertools = "0.11.0"
 wgpu = "0.17.1"
 env_logger = "0.9"
 log = "0.4"
-async-std = { version = "1.12", features = ["attributes"] }
 bytemuck = { version = "1.10.0", features = ["derive"] }
 cgmath = "0.18"
 lerp = { version = "0.4.0", features = ["derive"] }
@@ -19,3 +18,4 @@ winit = "0.28.7"
 derive_setters = "0.1.5"
 memoffset = "0.6.5"
 bitflags = "1.3.2"
+pollster = "0.3.0"
