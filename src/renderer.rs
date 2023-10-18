@@ -7,10 +7,9 @@ pub const SAMPLES: u32 = 4;
 
 pub struct Renderer {
     surface: wgpu::Surface,
-    pub swapchain_format: wgpu::TextureFormat,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
-    config: wgpu::SurfaceConfiguration,
+    pub config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
     pub bind_group: wgpu::BindGroup,
     pub bind_group_layout: wgpu::BindGroupLayout,
@@ -23,10 +22,10 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub async fn new(window: &Window) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new(window: &Window) -> Self {
         let size = window.inner_size();
-        let instance = wgpu::Instance::new(wgpu::Backends::all());
-        let surface = unsafe { instance.create_surface(window) };
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
+        let surface = unsafe { instance.create_surface(window) }.unwrap();
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::LowPower,
@@ -51,19 +50,11 @@ impl Renderer {
             .await
             .unwrap();
 
-        let swapchain_format = *surface
-            .get_supported_formats(&adapter)
-            .first()
-            .expect("Surface is incompatible with the adapter");
-        println!("Swapchain format: {swapchain_format:?}");
-
-        let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: swapchain_format,
-            width: size.width,
-            height: size.height,
-            present_mode: wgpu::PresentMode::Fifo,
-        };
+        let config = surface
+            .get_default_config(&adapter, size.width, size.height)
+            .unwrap();
+        println!("Swapchain format: {:?}", config.format);
+        println!("Swapchain present mode: {:?}", config.present_mode);
 
         surface.configure(&device, &config);
 
@@ -113,6 +104,7 @@ impl Renderer {
                 sample_count: SAMPLES,
                 dimension: wgpu::TextureDimension::D2,
                 format: DEPTH_FORMAT,
+                view_formats: &[],
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             }),
         );
@@ -128,7 +120,8 @@ impl Renderer {
                 mip_level_count: 1,
                 sample_count: SAMPLES,
                 dimension: wgpu::TextureDimension::D2,
-                format: swapchain_format,
+                format: config.format,
+                view_formats: &[],
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             }))
         } else {
@@ -144,9 +137,8 @@ impl Renderer {
             ),
         });
 
-        Ok(Self {
+        Self {
             surface,
-            swapchain_format,
             device,
             queue,
             config,
@@ -161,7 +153,7 @@ impl Renderer {
             depth_texture,
             buffer: uniform_buffer,
             shader,
-        })
+        }
     }
 
     pub fn resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
@@ -185,6 +177,7 @@ impl Renderer {
                 sample_count: SAMPLES,
                 dimension: wgpu::TextureDimension::D2,
                 format: DEPTH_FORMAT,
+                view_formats: &[],
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             }),
         );
@@ -201,7 +194,8 @@ impl Renderer {
                 mip_level_count: 1,
                 sample_count: SAMPLES,
                 dimension: wgpu::TextureDimension::D2,
-                format: self.swapchain_format,
+                format: self.config.format,
+                view_formats: &[],
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             });
             self.color_texture_view = Some(texture.create_view(&Default::default()));

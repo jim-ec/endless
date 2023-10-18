@@ -20,7 +20,7 @@ use crate::{
 pub const CAMERA_RESPONSIVNESS: f64 = 0.5;
 pub const FRAME_TIME: f64 = 1.0 / 60.0;
 
-pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
+pub async fn run() {
     env_logger::init();
     let mut last_render_time = Instant::now();
     let event_loop = EventLoop::new();
@@ -30,7 +30,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .build(&event_loop)
         .unwrap();
 
-    let mut renderer = renderer::Renderer::new(&window).await?;
+    let mut renderer = renderer::Renderer::new(&window).await;
     let mut world = perf("World generation", || world::World::new(&renderer));
 
     let mut dragging = false;

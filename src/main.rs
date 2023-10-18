@@ -10,6 +10,6 @@ mod util;
 mod world;
 
 #[async_std::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() {
     app::run().await
 }

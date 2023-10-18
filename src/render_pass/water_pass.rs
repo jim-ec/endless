@@ -63,7 +63,7 @@ impl WaterPass {
                     module: &renderer.shader,
                     entry_point: "water_fragment",
                     targets: &[Some(wgpu::ColorTargetState {
-                        format: renderer.swapchain_format,
+                        format: renderer.config.format,
                         blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                         write_mask: wgpu::ColorWrites::ALL,
                     })],

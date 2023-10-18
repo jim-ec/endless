@@ -163,7 +163,7 @@ impl VoxelPass {
                     module: &renderer.shader,
                     entry_point: "voxel_fragment",
                     targets: &[Some(wgpu::ColorTargetState {
-                        format: renderer.swapchain_format,
+                        format: renderer.config.format,
                         blend: Some(wgpu::BlendState::REPLACE),
                         write_mask: wgpu::ColorWrites::ALL,
                     })],
