@@ -2,17 +2,11 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug",
-            "type": "cppdbg",
+            "name": "Launch",
+            "type": "lldb",
             "request": "launch",
             "program": "${workspaceFolder}/target/debug/${workspaceFolderBasename}",
-            "args": [],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}",
-            "environment": [],
-            "externalConsole": false,
-            "MIMode": "lldb",
-            "preLaunchTask": "build"
+            "cwd": "${workspaceRoot}",
         }
     ]
 }
