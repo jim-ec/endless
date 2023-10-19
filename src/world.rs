@@ -2,7 +2,7 @@ use cgmath::vec3;
 use noise::NoiseFn;
 
 use crate::{
-    raster::{self, HEIGHT, WIDTH},
+    raster::{self, N},
     render_pass::{line_pass::LinePass, voxel_pass::VoxelPass, water_pass::WaterPass},
     renderer::Renderer,
     util::{rescale, rgb},
@@ -72,48 +72,42 @@ impl World {
                 [
                     [
                         vec3(0.0, 0.0, 0.0),
-                        vec3(WIDTH as f32, 0.0, 0.0),
-                        vec3(WIDTH as f32, WIDTH as f32, 0.0),
-                        vec3(0.0, WIDTH as f32, 0.0),
+                        vec3(N as f32, 0.0, 0.0),
+                        vec3(N as f32, N as f32, 0.0),
+                        vec3(0.0, N as f32, 0.0),
                         vec3(0.0, 0.0, 0.0),
                     ]
                     .as_slice()
-                    .into_iter()
+                    .iter()
                     .copied(),
                     [
-                        vec3(0.0, 0.0, HEIGHT as f32),
-                        vec3(WIDTH as f32, 0.0, HEIGHT as f32),
-                        vec3(WIDTH as f32, WIDTH as f32, HEIGHT as f32),
-                        vec3(0.0, WIDTH as f32, HEIGHT as f32),
-                        vec3(0.0, 0.0, HEIGHT as f32),
+                        vec3(0.0, 0.0, N as f32),
+                        vec3(N as f32, 0.0, N as f32),
+                        vec3(N as f32, N as f32, N as f32),
+                        vec3(0.0, N as f32, N as f32),
+                        vec3(0.0, 0.0, N as f32),
                     ]
                     .as_slice()
-                    .into_iter()
+                    .iter()
                     .copied(),
-                    [vec3(0.0, 0.0, 0.0), vec3(0.0, 0.0, HEIGHT as f32)]
+                    [vec3(0.0, 0.0, 0.0), vec3(0.0, 0.0, N as f32)]
                         .as_slice()
-                        .into_iter()
+                        .iter()
+                        .copied(),
+                    [vec3(N as f32, 0.0, 0.0), vec3(N as f32, 0.0, N as f32)]
+                        .as_slice()
+                        .iter()
+                        .copied(),
+                    [vec3(0.0, N as f32, 0.0), vec3(0.0, N as f32, N as f32)]
+                        .as_slice()
+                        .iter()
                         .copied(),
                     [
-                        vec3(WIDTH as f32, 0.0, 0.0),
-                        vec3(WIDTH as f32, 0.0, HEIGHT as f32),
+                        vec3(N as f32, N as f32, 0.0),
+                        vec3(N as f32, N as f32, N as f32),
                     ]
                     .as_slice()
-                    .into_iter()
-                    .copied(),
-                    [
-                        vec3(0.0, WIDTH as f32, 0.0),
-                        vec3(0.0, WIDTH as f32, HEIGHT as f32),
-                    ]
-                    .as_slice()
-                    .into_iter()
-                    .copied(),
-                    [
-                        vec3(WIDTH as f32, WIDTH as f32, 0.0),
-                        vec3(WIDTH as f32, WIDTH as f32, HEIGHT as f32),
-                    ]
-                    .as_slice()
-                    .into_iter()
+                    .iter()
                     .copied(),
                 ],
             ),

@@ -2,7 +2,7 @@ use std::f64::consts::TAU;
 
 use cgmath::{vec3, Matrix4, Quaternion, Rotation3, SquareMatrix, Vector3, Vector4};
 
-use crate::raster::WIDTH;
+use crate::raster::N;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Camera {
@@ -37,8 +37,8 @@ impl Camera {
         Self {
             orbit: -0.3 * TAU,
             tilt: 0.3 * 0.4 * TAU,
-            distance: WIDTH as f64,
-            origin: 0.5 * vec3(WIDTH as f64, WIDTH as f64, 0.0),
+            distance: N as f64,
+            origin: 0.5 * vec3(N as f64, N as f64, N as f64),
             fovy: 60.0,
         }
     }

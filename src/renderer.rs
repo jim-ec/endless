@@ -203,10 +203,10 @@ impl Renderer {
         }
     }
 
-    pub fn render<'a>(
+    pub fn render(
         &self,
         camera: &camera::Camera,
-        passes: &[&'a dyn RenderPass],
+        passes: &[&dyn RenderPass],
     ) -> Result<(), wgpu::SurfaceError> {
         let surface_texture = self.surface.get_current_texture()?;
         let view = surface_texture

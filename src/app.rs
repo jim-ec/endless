@@ -37,17 +37,15 @@ pub async fn run() {
                 window.set_visible(true);
             }
 
-            Event::DeviceEvent { event, .. } => match event {
-                DeviceEvent::MouseMotion { delta } => {
-                    if dragging {
-                        camera_target.pan(
-                            -0.002 * delta.0 * camera.distance,
-                            0.002 * delta.1 * camera.distance,
-                        );
-                    }
-                }
-                _ => {}
-            },
+            Event::DeviceEvent {
+                event: DeviceEvent::MouseMotion { delta },
+                ..
+            } if dragging => {
+                camera_target.pan(
+                    -0.002 * delta.0 * camera.distance,
+                    0.002 * delta.1 * camera.distance,
+                );
+            }
 
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested
@@ -102,7 +100,7 @@ pub async fn run() {
                 }
 
                 WindowEvent::TouchpadMagnify { delta, .. } => {
-                    camera_target.distance = camera_target.distance * (1.0 - delta);
+                    camera_target.distance *= 1.0 - delta;
                 }
 
                 WindowEvent::SmartMagnify { .. } => {

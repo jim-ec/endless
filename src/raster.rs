@@ -6,11 +6,10 @@ use itertools::Itertools;
 
 use crate::util::perf;
 
-pub const WIDTH: usize = 100;
-pub const HEIGHT: usize = 50;
+pub const N: usize = 8;
 pub const WATER_LEVEL: usize = 2;
 
-pub const CAPACITY: usize = WIDTH * WIDTH * HEIGHT;
+pub const CAPACITY: usize = N * N * N;
 
 #[derive(Clone)]
 pub struct Raster<T> {
@@ -18,18 +17,20 @@ pub struct Raster<T> {
 }
 
 fn linear(x: usize, y: usize, z: usize) -> usize {
-    x * WIDTH * HEIGHT + y * HEIGHT + z
+    z + N * (y + N * x)
 }
 
 impl<T> std::ops::Index<(usize, usize, usize)> for Raster<T> {
     type Output = T;
 
+    #[track_caller]
     fn index(&self, index: (usize, usize, usize)) -> &Self::Output {
         &self.voxels[linear(index.0, index.1, index.2)]
     }
 }
 
 impl<T> std::ops::IndexMut<(usize, usize, usize)> for Raster<T> {
+    #[track_caller]
     fn index_mut(&mut self, index: (usize, usize, usize)) -> &mut Self::Output {
         &mut self.voxels[linear(index.0, index.1, index.2)]
     }
@@ -44,9 +45,9 @@ impl<T: Default + Clone> Default for Raster<T> {
 }
 
 pub fn indices() -> impl Iterator<Item = (usize, usize, usize)> {
-    (0..WIDTH)
-        .cartesian_product(0..WIDTH)
-        .cartesian_product(0..HEIGHT)
+    (0..N)
+        .cartesian_product(0..N)
+        .cartesian_product(0..N)
         .map(|((x, y), z)| (x, y, z))
 }
 
@@ -63,28 +64,16 @@ impl<T> Raster<T> {
 }
 
 impl<T: Copy> Raster<T> {
-    pub fn map<R, F: Fn(T) -> R>(&self, label: &str, f: F) -> Raster<R> {
-        let mut voxels = Vec::with_capacity(CAPACITY);
-        perf(label, || {
-            for (x, y, z) in indices() {
-                voxels.push(f(self[(x, y, z)]));
-            }
-        });
-        Raster { voxels }
+    pub fn map<R>(&self, label: &str, f: impl Fn(T) -> R) -> Raster<R> {
+        Raster::generate(label, |co| f(self[co]))
     }
 
-    pub fn map_with_coordinate<R, F: FnMut(T, (usize, usize, usize)) -> R>(
+    pub fn map_with_coordinate<R>(
         &self,
         label: &str,
-        mut f: F,
+        mut f: impl FnMut(T, (usize, usize, usize)) -> R,
     ) -> Raster<R> {
-        let mut voxels = Vec::with_capacity(CAPACITY);
-        perf(label, || {
-            for (x, y, z) in indices() {
-                voxels.push(f(self[(x, y, z)], (x, y, z)));
-            }
-        });
-        Raster { voxels }
+        Raster::generate(label, |co| f(self[co], co))
     }
 }
 
@@ -136,19 +125,19 @@ bitflags! {
 pub fn height_map<F: Fn(Vector2<f64>) -> f64>(f: F) -> Raster<bool> {
     let mut voxels = Vec::with_capacity(CAPACITY);
 
-    for (x, y) in (0..WIDTH).cartesian_product(0..WIDTH) {
+    for (x, y) in (0..N).cartesian_product(0..N) {
         let position = vec2(x as f64 + 0.5, y as f64 + 0.5);
 
-        let h = (f(position).clamp(0.0, 1.0) * HEIGHT as f64) as usize;
+        let h = (f(position).clamp(0.0, 1.0) * N as f64) as usize;
         voxels.extend(std::iter::repeat(true).take(h));
-        voxels.extend(std::iter::repeat(false).take(HEIGHT - h));
+        voxels.extend(std::iter::repeat(false).take(N - h));
     }
 
     Raster { voxels }
 }
 
 pub fn elevation() -> Raster<f32> {
-    Raster::generate("Elevation", |(_, _, z)| z as f32 / HEIGHT as f32)
+    Raster::generate("Elevation", |(_, _, z)| z as f32 / N as f32)
 }
 
 impl Raster<bool> {
@@ -157,11 +146,11 @@ impl Raster<bool> {
         self.map_with_coordinate("Environment", |set, (x, y, z)| {
             let mut env = Env::empty();
 
-            let xp = x < WIDTH - 1;
+            let xp = x < N - 1;
             let xn = x > 0;
-            let yp = y < WIDTH - 1;
+            let yp = y < N - 1;
             let yn = y > 0;
-            let zp = z < HEIGHT - 1;
+            let zp = z < N - 1;
             let zn = z > 0;
 
             env.set(Env::ZZZ, set);
@@ -207,11 +196,11 @@ impl Raster<Env> {
         self.map_with_coordinate("Visibility", |env, (x, y, z)| {
             let mut vis = Vis::empty();
 
-            let xp = x < WIDTH - 1;
+            let xp = x < N - 1;
             let xn = x > 0;
-            let yp = y < WIDTH - 1;
+            let yp = y < N - 1;
             let yn = y > 0;
-            let zp = z < HEIGHT - 1;
+            let zp = z < N - 1;
             let zn = z > 0;
 
             vis.set(Vis::XP, xp && !env.contains(Env::PZZ));
@@ -308,12 +297,12 @@ impl Raster<f32> {
                 ] {
                     if env.contains(e) {
                         let co = (
-                            (c.0 as isize + o.0) as usize,
-                            (c.1 as isize + o.1) as usize,
-                            (c.2 as isize + o.2) as usize,
+                            (c.0 as isize + o.0).clamp(0, CAPACITY as isize - 1) as usize,
+                            (c.1 as isize + o.1).clamp(0, CAPACITY as isize - 1) as usize,
+                            (c.2 as isize + o.2).clamp(0, CAPACITY as isize - 1) as usize,
                         );
                         if mask[co] {
-                            v = v + self[co];
+                            v += self[co];
                             count += 1;
                         }
                     }

@@ -1,5 +1,5 @@
 use crate::{
-    raster::{WATER_LEVEL, WIDTH},
+    raster::{N, WATER_LEVEL},
     renderer::{self, DEPTH_FORMAT, SAMPLES},
 };
 use cgmath::{vec3, Vector3};
@@ -18,9 +18,9 @@ impl WaterPass {
     pub fn new(renderer: &renderer::Renderer) -> WaterPass {
         let vertices: &[Vector3<f32>] = &[
             vec3(0.0, 0.0, WATER_LEVEL as f32 - 0.1),
-            vec3(WIDTH as f32, 0.0, WATER_LEVEL as f32 - 0.1),
-            vec3(0.0, WIDTH as f32, WATER_LEVEL as f32 - 0.1),
-            vec3(WIDTH as f32, WIDTH as f32, WATER_LEVEL as f32 - 0.1),
+            vec3(N as f32, 0.0, WATER_LEVEL as f32 - 0.1),
+            vec3(0.0, N as f32, WATER_LEVEL as f32 - 0.1),
+            vec3(N as f32, N as f32, WATER_LEVEL as f32 - 0.1),
         ];
 
         let vertex_buffer = renderer
@@ -30,7 +30,7 @@ impl WaterPass {
                 contents: unsafe {
                     std::slice::from_raw_parts(
                         vertices.as_ptr() as *const u8,
-                        vertices.len() * std::mem::size_of::<Vector3<f32>>(),
+                        std::mem::size_of_val(vertices),
                     )
                 },
                 usage: wgpu::BufferUsages::VERTEX,
