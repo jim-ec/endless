@@ -42,7 +42,7 @@ impl World {
             .smooth(&shell, &env);
         let elevation = raster::elevation();
 
-        let color = steepness.map_with_coordinate("Color", |s, (x, y, z)| {
+        let color = steepness.map_with_coordinate("Color", |s, [x, y, z]| {
             let sand = rgb(194, 150, 80);
             let grass = rgb(120, 135, 5);
             let snow = rgb(200, 200, 200);
@@ -52,7 +52,7 @@ impl World {
                 return sand;
             }
 
-            let e = elevation[(x, y, z)];
+            let e = elevation[[x, y, z]];
 
             if s > 0.7 {
                 return rock;

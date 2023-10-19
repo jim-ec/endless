@@ -20,19 +20,19 @@ fn linear(x: usize, y: usize, z: usize) -> usize {
     z + N * (y + N * x)
 }
 
-impl<T> std::ops::Index<(usize, usize, usize)> for Raster<T> {
+impl<T> std::ops::Index<[usize; 3]> for Raster<T> {
     type Output = T;
 
     #[track_caller]
-    fn index(&self, index: (usize, usize, usize)) -> &Self::Output {
-        &self.voxels[linear(index.0, index.1, index.2)]
+    fn index(&self, index: [usize; 3]) -> &Self::Output {
+        &self.voxels[linear(index[0], index[1], index[2])]
     }
 }
 
-impl<T> std::ops::IndexMut<(usize, usize, usize)> for Raster<T> {
+impl<T> std::ops::IndexMut<[usize; 3]> for Raster<T> {
     #[track_caller]
-    fn index_mut(&mut self, index: (usize, usize, usize)) -> &mut Self::Output {
-        &mut self.voxels[linear(index.0, index.1, index.2)]
+    fn index_mut(&mut self, index: [usize; 3]) -> &mut Self::Output {
+        &mut self.voxels[linear(index[0], index[1], index[2])]
     }
 }
 
@@ -44,19 +44,19 @@ impl<T: Default + Clone> Default for Raster<T> {
     }
 }
 
-pub fn indices() -> impl Iterator<Item = (usize, usize, usize)> {
+pub fn coordinates() -> impl Iterator<Item = [usize; 3]> {
     (0..N)
         .cartesian_product(0..N)
         .cartesian_product(0..N)
-        .map(|((x, y), z)| (x, y, z))
+        .map(|((x, y), z)| [x, y, z])
 }
 
 impl<T> Raster<T> {
-    pub fn generate<F: FnMut((usize, usize, usize)) -> T>(label: &str, mut f: F) -> Self {
+    pub fn generate<F: FnMut([usize; 3]) -> T>(label: &str, mut f: F) -> Self {
         let mut voxels = Vec::with_capacity(CAPACITY);
         perf(label, || {
-            for (x, y, z) in indices() {
-                voxels.push(f((x, y, z)));
+            for co in coordinates() {
+                voxels.push(f(co));
             }
         });
         Raster { voxels }
@@ -71,7 +71,7 @@ impl<T: Copy> Raster<T> {
     pub fn map_with_coordinate<R>(
         &self,
         label: &str,
-        mut f: impl FnMut(T, (usize, usize, usize)) -> R,
+        mut f: impl FnMut(T, [usize; 3]) -> R,
     ) -> Raster<R> {
         Raster::generate(label, |co| f(self[co], co))
     }
@@ -137,13 +137,13 @@ pub fn height_map<F: Fn(Vector2<f64>) -> f64>(f: F) -> Raster<bool> {
 }
 
 pub fn elevation() -> Raster<f32> {
-    Raster::generate("Elevation", |(_, _, z)| z as f32 / N as f32)
+    Raster::generate("Elevation", |[_, _, z]| z as f32 / N as f32)
 }
 
 impl Raster<bool> {
     /// Compute the direct neighourhood of each voxel.
     pub fn environment(&self) -> Raster<Env> {
-        self.map_with_coordinate("Environment", |set, (x, y, z)| {
+        self.map_with_coordinate("Environment", |set, [x, y, z]| {
             let mut env = Env::empty();
 
             let xp = x < N - 1;
@@ -154,32 +154,32 @@ impl Raster<bool> {
             let zn = z > 0;
 
             env.set(Env::ZZZ, set);
-            env.set(Env::ZZP, zp && self[(x, y, z + 1)]);
-            env.set(Env::ZZN, zn && self[(x, y, z - 1)]);
-            env.set(Env::ZPZ, yp && self[(x, y + 1, z)]);
-            env.set(Env::ZPP, yp && zp && self[(x, y + 1, z + 1)]);
-            env.set(Env::ZPN, yp && zn && self[(x, y + 1, z - 1)]);
-            env.set(Env::ZNZ, yn && self[(x, y - 1, z)]);
-            env.set(Env::ZNP, yn && zp && self[(x, y - 1, z + 1)]);
-            env.set(Env::ZNN, yn && zn && self[(x, y - 1, z - 1)]);
-            env.set(Env::PZZ, xp && self[(x + 1, y, z)]);
-            env.set(Env::PZP, xp && zp && self[(x + 1, y, z + 1)]);
-            env.set(Env::PZN, xp && zn && self[(x + 1, y, z - 1)]);
-            env.set(Env::PPZ, xp && yp && self[(x + 1, y + 1, z)]);
-            env.set(Env::PPP, xp && yp && zp && self[(x + 1, y + 1, z + 1)]);
-            env.set(Env::PPN, xp && yp && zn && self[(x + 1, y + 1, z - 1)]);
-            env.set(Env::PNZ, xp && yn && self[(x + 1, y - 1, z)]);
-            env.set(Env::PNP, xp && yn && zp && self[(x + 1, y - 1, z + 1)]);
-            env.set(Env::PNN, xp && yn && zn && self[(x + 1, y - 1, z - 1)]);
-            env.set(Env::NZZ, xn && self[(x - 1, y, z)]);
-            env.set(Env::NZP, xn && zp && self[(x - 1, y, z + 1)]);
-            env.set(Env::NZN, xn && zn && self[(x - 1, y, z - 1)]);
-            env.set(Env::NPZ, xn && yp && self[(x - 1, y + 1, z)]);
-            env.set(Env::NPP, xn && yp && zp && self[(x - 1, y + 1, z + 1)]);
-            env.set(Env::NPN, xn && yp && zn && self[(x - 1, y + 1, z - 1)]);
-            env.set(Env::NNZ, xn && yn && self[(x - 1, y - 1, z)]);
-            env.set(Env::NNP, xn && yn && zp && self[(x - 1, y - 1, z + 1)]);
-            env.set(Env::NNN, xn && yn && zn && self[(x - 1, y - 1, z - 1)]);
+            env.set(Env::ZZP, zp && self[[x, y, z + 1]]);
+            env.set(Env::ZZN, zn && self[[x, y, z - 1]]);
+            env.set(Env::ZPZ, yp && self[[x, y + 1, z]]);
+            env.set(Env::ZPP, yp && zp && self[[x, y + 1, z + 1]]);
+            env.set(Env::ZPN, yp && zn && self[[x, y + 1, z - 1]]);
+            env.set(Env::ZNZ, yn && self[[x, y - 1, z]]);
+            env.set(Env::ZNP, yn && zp && self[[x, y - 1, z + 1]]);
+            env.set(Env::ZNN, yn && zn && self[[x, y - 1, z - 1]]);
+            env.set(Env::PZZ, xp && self[[x + 1, y, z]]);
+            env.set(Env::PZP, xp && zp && self[[x + 1, y, z + 1]]);
+            env.set(Env::PZN, xp && zn && self[[x + 1, y, z - 1]]);
+            env.set(Env::PPZ, xp && yp && self[[x + 1, y + 1, z]]);
+            env.set(Env::PPP, xp && yp && zp && self[[x + 1, y + 1, z + 1]]);
+            env.set(Env::PPN, xp && yp && zn && self[[x + 1, y + 1, z - 1]]);
+            env.set(Env::PNZ, xp && yn && self[[x + 1, y - 1, z]]);
+            env.set(Env::PNP, xp && yn && zp && self[[x + 1, y - 1, z + 1]]);
+            env.set(Env::PNN, xp && yn && zn && self[[x + 1, y - 1, z - 1]]);
+            env.set(Env::NZZ, xn && self[[x - 1, y, z]]);
+            env.set(Env::NZP, xn && zp && self[[x - 1, y, z + 1]]);
+            env.set(Env::NZN, xn && zn && self[[x - 1, y, z - 1]]);
+            env.set(Env::NPZ, xn && yp && self[[x - 1, y + 1, z]]);
+            env.set(Env::NPP, xn && yp && zp && self[[x - 1, y + 1, z + 1]]);
+            env.set(Env::NPN, xn && yp && zn && self[[x - 1, y + 1, z - 1]]);
+            env.set(Env::NNZ, xn && yn && self[[x - 1, y - 1, z]]);
+            env.set(Env::NNP, xn && yn && zp && self[[x - 1, y - 1, z + 1]]);
+            env.set(Env::NNN, xn && yn && zn && self[[x - 1, y - 1, z - 1]]);
             env
         })
     }
@@ -193,7 +193,7 @@ impl Raster<Env> {
     /// Compute visible faces of each voxel i.e. faces that are not internal.
     /// Faces at the raster boundary are not considered to be visible.
     pub fn visibility(&self) -> Raster<Vis> {
-        self.map_with_coordinate("Visibility", |env, (x, y, z)| {
+        self.map_with_coordinate("Visibility", |env, [x, y, z]| {
             let mut vis = Vis::empty();
 
             let xp = x < N - 1;
@@ -268,39 +268,39 @@ impl Raster<f32> {
             if mask[c] {
                 let env = env[c];
                 for (e, o) in [
-                    (Env::ZZP, (0, 0, 1)),
-                    (Env::ZZN, (0, 0, -1)),
-                    (Env::ZPZ, (0, 1, 0)),
-                    (Env::ZPP, (0, 1, 1)),
-                    (Env::ZPN, (0, 1, -1)),
-                    (Env::ZNZ, (0, -1, 0)),
-                    (Env::ZNP, (0, -1, 1)),
-                    (Env::ZNN, (0, -1, -1)),
-                    (Env::PZZ, (1, 0, 0)),
-                    (Env::PZP, (1, 0, 1)),
-                    (Env::PZN, (1, 0, -1)),
-                    (Env::PPZ, (1, 1, 0)),
-                    (Env::PPP, (1, 1, 1)),
-                    (Env::PPN, (1, 1, -1)),
-                    (Env::PNZ, (1, -1, 0)),
-                    (Env::PNP, (1, -1, 1)),
-                    (Env::PNN, (1, -1, -1)),
-                    (Env::NZZ, (-1, 0, 0)),
-                    (Env::NZP, (-1, 0, 1)),
-                    (Env::NZN, (-1, 0, -1)),
-                    (Env::NPZ, (-1, 1, 0)),
-                    (Env::NPP, (-1, 1, 1)),
-                    (Env::NPN, (-1, 1, -1)),
-                    (Env::NNZ, (-1, -1, 0)),
-                    (Env::NNP, (-1, -1, 1)),
-                    (Env::NNN, (-1, -1, -1)),
+                    (Env::ZZP, [0, 0, 1]),
+                    (Env::ZZN, [0, 0, -1]),
+                    (Env::ZPZ, [0, 1, 0]),
+                    (Env::ZPP, [0, 1, 1]),
+                    (Env::ZPN, [0, 1, -1]),
+                    (Env::ZNZ, [0, -1, 0]),
+                    (Env::ZNP, [0, -1, 1]),
+                    (Env::ZNN, [0, -1, -1]),
+                    (Env::PZZ, [1, 0, 0]),
+                    (Env::PZP, [1, 0, 1]),
+                    (Env::PZN, [1, 0, -1]),
+                    (Env::PPZ, [1, 1, 0]),
+                    (Env::PPP, [1, 1, 1]),
+                    (Env::PPN, [1, 1, -1]),
+                    (Env::PNZ, [1, -1, 0]),
+                    (Env::PNP, [1, -1, 1]),
+                    (Env::PNN, [1, -1, -1]),
+                    (Env::NZZ, [-1, 0, 0]),
+                    (Env::NZP, [-1, 0, 1]),
+                    (Env::NZN, [-1, 0, -1]),
+                    (Env::NPZ, [-1, 1, 0]),
+                    (Env::NPP, [-1, 1, 1]),
+                    (Env::NPN, [-1, 1, -1]),
+                    (Env::NNZ, [-1, -1, 0]),
+                    (Env::NNP, [-1, -1, 1]),
+                    (Env::NNN, [-1, -1, -1]),
                 ] {
                     if env.contains(e) {
-                        let co = (
-                            (c.0 as isize + o.0).clamp(0, CAPACITY as isize - 1) as usize,
-                            (c.1 as isize + o.1).clamp(0, CAPACITY as isize - 1) as usize,
-                            (c.2 as isize + o.2).clamp(0, CAPACITY as isize - 1) as usize,
-                        );
+                        let co = [
+                            (c[0] as isize + o[0]).clamp(0, CAPACITY as isize - 1) as usize,
+                            (c[1] as isize + o[1]).clamp(0, CAPACITY as isize - 1) as usize,
+                            (c[2] as isize + o[2]).clamp(0, CAPACITY as isize - 1) as usize,
+                        ];
                         if mask[co] {
                             v += self[co];
                             count += 1;
