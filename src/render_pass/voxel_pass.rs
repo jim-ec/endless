@@ -1,5 +1,5 @@
 use crate::{
-    raster::{self, Raster},
+    grid::{self, Grid},
     renderer::{self, DEPTH_FORMAT, SAMPLES},
 };
 use cgmath::{vec3, Vector3};
@@ -21,8 +21,8 @@ pub struct VoxelPass {
 impl VoxelPass {
     pub fn new(
         renderer: &renderer::Renderer,
-        raster: &Raster<bool>,
-        color: &Raster<Vector3<f32>>,
+        grid: &Grid<bool>,
+        color: &Grid<Vector3<f32>>,
     ) -> VoxelPass {
         let mut vertices: Vec<Vector3<f32>> = Vec::new();
         let mut vertex_normals: Vec<Vector3<f32>> = Vec::new();
@@ -39,8 +39,8 @@ impl VoxelPass {
         let mut positions: Vec<Vector3<f32>> = Vec::new();
         let mut colors: Vec<Vector3<f32>> = Vec::new();
 
-        for [x, y, z] in raster::coordinates() {
-            if raster[[x, y, z]] {
+        for [x, y, z] in grid::coordinates() {
+            if grid[[x, y, z]] {
                 positions.push(vec3(x as f32, y as f32, z as f32));
                 colors.push(color[[x, y, z]]);
             }

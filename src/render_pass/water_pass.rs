@@ -1,5 +1,5 @@
 use crate::{
-    raster::{N, WATER_LEVEL},
+    grid::{N, WATER_LEVEL},
     renderer::{self, DEPTH_FORMAT, SAMPLES},
 };
 use cgmath::{vec3, Vector3};

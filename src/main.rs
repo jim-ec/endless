@@ -4,7 +4,7 @@ use pollster::FutureExt;
 
 mod app;
 mod camera;
-mod raster;
+mod grid;
 mod render_pass;
 mod renderer;
 mod transform;

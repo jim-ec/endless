@@ -12,7 +12,7 @@ pub const VOLUME: usize = N * N * N;
 pub const WATER_LEVEL: usize = 2;
 
 #[derive(Clone)]
-pub struct Raster<T> {
+pub struct Grid<T> {
     pub voxels: Vec<T>,
 }
 
@@ -20,7 +20,7 @@ fn linear([x, y, z]: [usize; 3]) -> usize {
     z + N * (y + N * x)
 }
 
-impl<T> std::ops::Index<[usize; 3]> for Raster<T> {
+impl<T> std::ops::Index<[usize; 3]> for Grid<T> {
     type Output = T;
 
     #[track_caller]
@@ -29,14 +29,14 @@ impl<T> std::ops::Index<[usize; 3]> for Raster<T> {
     }
 }
 
-impl<T> std::ops::IndexMut<[usize; 3]> for Raster<T> {
+impl<T> std::ops::IndexMut<[usize; 3]> for Grid<T> {
     #[track_caller]
     fn index_mut(&mut self, index: [usize; 3]) -> &mut Self::Output {
         &mut self.voxels[linear(index)]
     }
 }
 
-impl<T: Default + Clone> Default for Raster<T> {
+impl<T: Default + Clone> Default for Grid<T> {
     fn default() -> Self {
         Self {
             voxels: vec![T::default(); VOLUME],
@@ -51,7 +51,7 @@ pub fn coordinates() -> impl Iterator<Item = [usize; 3]> {
         .map(|((x, y), z)| [x, y, z])
 }
 
-impl<T> Raster<T> {
+impl<T> Grid<T> {
     pub fn generate<F: FnMut([usize; 3]) -> T>(label: &str, mut f: F) -> Self {
         let mut voxels = Vec::with_capacity(VOLUME);
         perf(label, || {
@@ -59,21 +59,21 @@ impl<T> Raster<T> {
                 voxels.push(f(co));
             }
         });
-        Raster { voxels }
+        Grid { voxels }
     }
 }
 
-impl<T: Copy> Raster<T> {
-    pub fn map<R>(&self, label: &str, f: impl Fn(T) -> R) -> Raster<R> {
-        Raster::generate(label, |co| f(self[co]))
+impl<T: Copy> Grid<T> {
+    pub fn map<R>(&self, label: &str, f: impl Fn(T) -> R) -> Grid<R> {
+        Grid::generate(label, |co| f(self[co]))
     }
 
     pub fn map_with_coordinate<R>(
         &self,
         label: &str,
         mut f: impl FnMut(T, [usize; 3]) -> R,
-    ) -> Raster<R> {
-        Raster::generate(label, |co| f(self[co], co))
+    ) -> Grid<R> {
+        Grid::generate(label, |co| f(self[co], co))
     }
 }
 
@@ -122,7 +122,7 @@ bitflags! {
     }
 }
 
-pub fn height_map<F: Fn(Vector2<f64>) -> f64>(f: F) -> Raster<bool> {
+pub fn height_map<F: Fn(Vector2<f64>) -> f64>(f: F) -> Grid<bool> {
     let mut voxels = Vec::with_capacity(VOLUME);
 
     for (x, y) in (0..N).cartesian_product(0..N) {
@@ -133,16 +133,16 @@ pub fn height_map<F: Fn(Vector2<f64>) -> f64>(f: F) -> Raster<bool> {
         voxels.extend(std::iter::repeat(false).take(N - h));
     }
 
-    Raster { voxels }
+    Grid { voxels }
 }
 
-pub fn elevation() -> Raster<f32> {
-    Raster::generate("Elevation", |[_, _, z]| z as f32 / N as f32)
+pub fn elevation() -> Grid<f32> {
+    Grid::generate("Elevation", |[_, _, z]| z as f32 / N as f32)
 }
 
-impl Raster<bool> {
+impl Grid<bool> {
     /// Compute the direct neighourhood of each voxel.
-    pub fn environment(&self) -> Raster<Env> {
+    pub fn environment(&self) -> Grid<Env> {
         self.map_with_coordinate("Environment", |set, [x, y, z]| {
             let mut env = Env::empty();
 
@@ -184,15 +184,15 @@ impl Raster<bool> {
         })
     }
 
-    pub fn shell(&self, env: &Raster<Env>) -> Raster<bool> {
+    pub fn shell(&self, env: &Grid<Env>) -> Grid<bool> {
         self.map_with_coordinate("Shell", |set, c| set && !env[c].is_all())
     }
 }
 
-impl Raster<Env> {
+impl Grid<Env> {
     /// Compute visible faces of each voxel i.e. faces that are not internal.
-    /// Faces at the raster boundary are not considered to be visible.
-    pub fn visibility(&self) -> Raster<Vis> {
+    /// Faces at the grid boundary are not considered to be visible.
+    pub fn visibility(&self) -> Grid<Vis> {
         self.map_with_coordinate("Visibility", |env, [x, y, z]| {
             let mut vis = Vis::empty();
 
@@ -214,8 +214,8 @@ impl Raster<Env> {
     }
 }
 
-impl Raster<Vis> {
-    pub fn normals(&self) -> Raster<Vector3<f32>> {
+impl Grid<Vis> {
+    pub fn normals(&self) -> Grid<Vector3<f32>> {
         self.map("Normals", |vis| {
             let mut n = Vector3::zero();
 
@@ -246,7 +246,7 @@ impl Raster<Vis> {
         })
     }
 
-    pub fn coverage(&self) -> Raster<f32> {
+    pub fn coverage(&self) -> Grid<f32> {
         self.map("Coverage", |v| {
             let count = v.bits().count_ones();
             count as f32 / 8.0
@@ -254,15 +254,15 @@ impl Raster<Vis> {
     }
 }
 
-impl Raster<f32> {
-    pub fn grayscale(&self) -> Raster<Vector3<f32>> {
+impl Grid<f32> {
+    pub fn grayscale(&self) -> Grid<Vector3<f32>> {
         self.map("Grayscale", |f| {
             let f = f.powf(2.2);
             vec3(f, f, f)
         })
     }
 
-    pub fn smooth(&self, mask: &Raster<bool>, env: &Raster<Env>) -> Raster<f32> {
+    pub fn smooth(&self, mask: &Grid<bool>, env: &Grid<Env>) -> Grid<f32> {
         self.map_with_coordinate("Smooth", |mut v, c| {
             let mut count: usize = 1;
             if mask[c] {
@@ -315,8 +315,8 @@ impl Raster<f32> {
     }
 }
 
-impl Raster<Vector3<f32>> {
-    pub fn steepness(&self) -> Raster<f32> {
+impl Grid<Vector3<f32>> {
+    pub fn steepness(&self) -> Grid<f32> {
         self.map("Steepness", |n| 1.0 - n.dot(vec3(0.0, 0.0, 1.0)))
     }
 }

@@ -2,7 +2,7 @@ use cgmath::vec3;
 use noise::NoiseFn;
 
 use crate::{
-    raster::{self, N},
+    grid::{self, N},
     render_pass::{line_pass::LinePass, voxel_pass::VoxelPass, water_pass::WaterPass},
     renderer::Renderer,
     util::{rescale, rgb},
@@ -21,7 +21,7 @@ impl World {
         noise.frequency = 0.01;
         let noise = Turbulence::<_, Perlin>::new(noise);
 
-        let raster = raster::height_map(|v| {
+        let grid = grid::height_map(|v| {
             let mut n = noise.get([v.x - 10.0, v.y - 10.0]);
             n = rescale(n, -1.0..1.0, 0.0..1.0);
             n = n.powf(2.0);
@@ -29,9 +29,9 @@ impl World {
             n
         });
 
-        let env = raster.environment();
+        let env = grid.environment();
 
-        let shell = raster.shell(&env);
+        let shell = grid.shell(&env);
 
         let vis = env.visibility();
         let normal = vis.normals();
@@ -40,7 +40,7 @@ impl World {
             .smooth(&shell, &env)
             .smooth(&shell, &env)
             .smooth(&shell, &env);
-        let elevation = raster::elevation();
+        let elevation = grid::elevation();
 
         let color = steepness.map_with_coordinate("Color", |s, [x, y, z]| {
             let sand = rgb(194, 150, 80);
