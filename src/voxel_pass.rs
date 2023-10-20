@@ -19,8 +19,8 @@ pub struct VoxelPass {
 impl VoxelPass {
     pub fn new(
         renderer: &renderer::Renderer,
-        grid: &Grid<bool>,
-        color: &Grid<Vector3<f32>>,
+        grid: &Grid<bool, 3>,
+        color: &Grid<Vector3<f32>, 3>,
     ) -> VoxelPass {
         let mut vertices: Vec<Vector3<f32>> = Vec::new();
         let mut vertex_normals: Vec<Vector3<f32>> = Vec::new();
