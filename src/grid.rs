@@ -6,10 +6,8 @@ use itertools::Itertools;
 
 use crate::util::perf;
 
-pub const N: usize = 8;
+pub const N: usize = 64;
 pub const VOLUME: usize = N * N * N;
-
-pub const WATER_LEVEL: usize = 2;
 
 #[derive(Clone)]
 pub struct Grid<T> {
