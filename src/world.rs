@@ -21,53 +21,58 @@ impl World {
         noise.frequency = 0.01;
         let noise = Turbulence::<_, Perlin>::new(noise);
 
-        let height_map: grid::Grid<f32, 2> = grid::Grid::generate("Height map", |[x, y]| {
-            let mut n = noise.get([x as f64 - 10.0, y as f64 - 10.0]) as f32;
-            n = rescale(n, -1.0..1.0, 0.0..1.0);
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        enum Sediment {
+            Rock,
+            Soil,
+            Sand,
+            Air,
+        }
+
+        let rock_height_map: grid::Grid<f32, 2> = grid::Grid::generate("Height map", |[x, y]| {
+            let mut n = noise.get([x as f64, y as f64]) as f32;
+            n = rescale(n, -1.0..1.0, 0.1..1.0);
             n = n.powf(2.0);
-            n -= 0.1;
+            n
+        });
+        let soil_height_map: grid::Grid<f32, 2> = grid::Grid::generate("Height map", |[x, y]| {
+            let mut n = noise.get([x as f64 + 20.0, y as f64 + 20.0]) as f32;
+            n = rescale(n, -1.0..1.0, 0.1..0.3);
+            n
+        });
+        let sand_height_map: grid::Grid<f32, 2> = grid::Grid::generate("Height map", |[x, y]| {
+            let mut n = noise.get([x as f64 + 80.0, y as f64 + 80.0]) as f32;
+            n = rescale(n, -1.0..1.0, 0.1..0.2);
             n
         });
 
-        let grid: grid::Grid<bool, 3> = grid::Grid::generate("Grid", |[x, y, z]| {
-            let h = height_map[[x, y]];
-            (z as f32) < h * N as f32
+        let sediments: grid::Grid<Sediment, 3> = grid::Grid::generate("Sediments", |[x, y, z]| {
+            let rock = (rock_height_map[[x, y]] * N as f32) as usize;
+            let soil = (soil_height_map[[x, y]] * N as f32) as usize;
+            let sand = (sand_height_map[[x, y]] * N as f32) as usize;
+
+            if z < rock {
+                Sediment::Rock
+            } else if z < rock + soil {
+                Sediment::Soil
+            } else if z < rock + soil + sand {
+                Sediment::Sand
+            } else {
+                Sediment::Air
+            }
         });
+
+        let grid = sediments.map("Occupancy", |s| !matches!(s, Sediment::Air));
 
         let env = grid.environment();
 
         let shell = grid.shell(&env);
 
-        let vis = env.visibility();
-        let normal = vis.normals();
-        let steepness = normal
-            .steepness()
-            .smooth(&shell, &env)
-            .smooth(&shell, &env)
-            .smooth(&shell, &env);
-        let elevation = grid::elevation();
-
-        let color = steepness.map_with_coordinate("Color", |s, [x, y, z]| {
-            let sand = rgb(194, 150, 80);
-            let grass = rgb(120, 135, 5);
-            let snow = rgb(200, 200, 200);
-            let rock = rgb(40, 40, 50);
-
-            if z <= 2 {
-                return sand;
-            }
-
-            let e = elevation[[x, y, z]];
-
-            if s > 0.7 {
-                return rock;
-            }
-
-            if e > 0.5 {
-                snow
-            } else {
-                grass
-            }
+        let color = sediments.map("Color", |s| match s {
+            Sediment::Rock => rgb(40, 40, 50),
+            Sediment::Soil => rgb(100, 40, 20),
+            Sediment::Sand => rgb(194, 150, 80),
+            Sediment::Air => rgb(0, 0, 0),
         });
 
         let mut gizmo_pass = GizmoPass::new(renderer);
