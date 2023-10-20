@@ -3,14 +3,14 @@ use noise::NoiseFn;
 
 use crate::{
     grid::{self, N},
-    render_pass::{line_pass::LinePass, voxel_pass::VoxelPass},
+    render_pass::{gizmo_pass::GizmoPass, voxel_pass::VoxelPass},
     renderer::Renderer,
     util::{rescale, rgb},
 };
 
 pub struct World {
     pub voxel_pass: VoxelPass,
-    pub line_pass: LinePass,
+    pub gizmo_pass: GizmoPass,
 }
 
 impl World {
@@ -64,52 +64,12 @@ impl World {
             }
         });
 
+        let mut gizmo_pass = GizmoPass::new(renderer);
+        gizmo_pass.aabb(vec3(0.0, 0.0, 0.0), vec3(N as f32, N as f32, N as f32));
+
         World {
             voxel_pass: VoxelPass::new(renderer, &shell, &color),
-            line_pass: LinePass::new(
-                renderer,
-                [
-                    [
-                        vec3(0.0, 0.0, 0.0),
-                        vec3(N as f32, 0.0, 0.0),
-                        vec3(N as f32, N as f32, 0.0),
-                        vec3(0.0, N as f32, 0.0),
-                        vec3(0.0, 0.0, 0.0),
-                    ]
-                    .as_slice()
-                    .iter()
-                    .copied(),
-                    [
-                        vec3(0.0, 0.0, N as f32),
-                        vec3(N as f32, 0.0, N as f32),
-                        vec3(N as f32, N as f32, N as f32),
-                        vec3(0.0, N as f32, N as f32),
-                        vec3(0.0, 0.0, N as f32),
-                    ]
-                    .as_slice()
-                    .iter()
-                    .copied(),
-                    [vec3(0.0, 0.0, 0.0), vec3(0.0, 0.0, N as f32)]
-                        .as_slice()
-                        .iter()
-                        .copied(),
-                    [vec3(N as f32, 0.0, 0.0), vec3(N as f32, 0.0, N as f32)]
-                        .as_slice()
-                        .iter()
-                        .copied(),
-                    [vec3(0.0, N as f32, 0.0), vec3(0.0, N as f32, N as f32)]
-                        .as_slice()
-                        .iter()
-                        .copied(),
-                    [
-                        vec3(N as f32, N as f32, 0.0),
-                        vec3(N as f32, N as f32, N as f32),
-                    ]
-                    .as_slice()
-                    .iter()
-                    .copied(),
-                ],
-            ),
+            gizmo_pass,
         }
     }
 }

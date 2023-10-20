@@ -225,6 +225,7 @@ impl Renderer {
 
         if let Some(first_pass) = passes.first() {
             first_pass.render(
+                &self.queue,
                 &mut command_encoder,
                 wgpu::RenderPassColorAttachment {
                     view: self.texture_view(&view),
@@ -253,6 +254,7 @@ impl Renderer {
 
         for pass in &passes[1..] {
             pass.render(
+                &self.queue,
                 &mut command_encoder,
                 wgpu::RenderPassColorAttachment {
                     view: self.texture_view(&view),

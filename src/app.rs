@@ -134,7 +134,7 @@ pub async fn run() {
                     .distance
                     .lerp(camera_target.distance, CAMERA_RESPONSIVNESS);
 
-                match renderer.render(&camera, &[&world.voxel_pass, &world.line_pass]) {
+                match renderer.render(&camera, &[&world.voxel_pass, &world.gizmo_pass]) {
                     Ok(_) => {}
                     Err(wgpu::SurfaceError::Lost) => renderer.resize(renderer.size),
                     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,

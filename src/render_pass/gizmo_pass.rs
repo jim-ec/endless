@@ -1,40 +1,28 @@
 use cgmath::Vector3;
-use wgpu::util::BufferInitDescriptor;
-use wgpu::util::DeviceExt;
-
-use itertools::Itertools;
 
 use crate::renderer::{self, Renderer, DEPTH_FORMAT};
 
 use super::RenderPass;
 
-pub struct LinePass {
-    count: usize,
+pub struct GizmoPass {
+    gizmos: Vec<Gizmo>,
     buffer: wgpu::Buffer,
     pipeline: wgpu::RenderPipeline,
 }
 
-impl LinePass {
-    pub fn new(
-        renderer: &Renderer,
-        line_strips: impl IntoIterator<Item = impl IntoIterator<Item = Vector3<f32>>>,
-    ) -> Self {
-        let mut lines = Vec::new();
-        for line_strip in line_strips {
-            for (a, b) in line_strip.into_iter().tuple_windows() {
-                lines.extend([a, b]);
-            }
-        }
+#[derive(Clone, Copy, Debug)]
+struct Gizmo(Vector3<f32>, Vector3<f32>);
 
-        let buffer = renderer.device.create_buffer_init(&BufferInitDescriptor {
+unsafe impl bytemuck::Pod for Gizmo {}
+unsafe impl bytemuck::Zeroable for Gizmo {}
+
+impl GizmoPass {
+    pub fn new(renderer: &Renderer) -> Self {
+        let buffer = renderer.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            contents: unsafe {
-                std::slice::from_raw_parts(
-                    lines.as_ptr() as *const u8,
-                    lines.len() * std::mem::size_of::<Vector3<f32>>(),
-                )
-            },
-            usage: wgpu::BufferUsages::VERTEX,
+            size: 2048 * std::mem::size_of::<Gizmo>() as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
         });
 
         let pipeline = renderer
@@ -49,7 +37,7 @@ impl LinePass {
                 )),
                 vertex: wgpu::VertexState {
                     module: &renderer.shader,
-                    entry_point: "line_vertex",
+                    entry_point: "gizmo_vertex",
                     buffers: &[wgpu::VertexBufferLayout {
                         array_stride: std::mem::size_of::<Vector3<f32>>() as wgpu::BufferAddress,
                         step_mode: wgpu::VertexStepMode::Vertex,
@@ -62,7 +50,7 @@ impl LinePass {
                 },
                 fragment: Some(wgpu::FragmentState {
                     module: &renderer.shader,
-                    entry_point: "line_fragment",
+                    entry_point: "gizmo_fragment",
                     targets: &[Some(wgpu::ColorTargetState {
                         format: renderer.config.format,
                         blend: Some(wgpu::BlendState::ALPHA_BLENDING),
@@ -94,21 +82,69 @@ impl LinePass {
             });
 
         Self {
-            count: lines.len(),
+            gizmos: Vec::new(),
             buffer,
             pipeline,
         }
     }
+
+    pub fn aabb(&mut self, min: Vector3<f32>, max: Vector3<f32>) {
+        self.gizmos.extend([
+            Gizmo(min, Vector3::new(min.x, min.y, max.z)),
+            Gizmo(
+                Vector3::new(min.x, min.y, max.z),
+                Vector3::new(max.x, min.y, max.z),
+            ),
+            Gizmo(
+                Vector3::new(max.x, min.y, max.z),
+                Vector3::new(max.x, min.y, min.z),
+            ),
+            Gizmo(Vector3::new(max.x, min.y, min.z), min),
+            Gizmo(
+                Vector3::new(min.x, max.y, min.z),
+                Vector3::new(min.x, max.y, max.z),
+            ),
+            Gizmo(Vector3::new(min.x, max.y, max.z), max),
+            Gizmo(max, Vector3::new(max.x, max.y, min.z)),
+            Gizmo(
+                Vector3::new(max.x, max.y, min.z),
+                Vector3::new(min.x, max.y, min.z),
+            ),
+            Gizmo(
+                Vector3::new(min.x, min.y, min.z),
+                Vector3::new(min.x, max.y, min.z),
+            ),
+            Gizmo(
+                Vector3::new(min.x, min.y, max.z),
+                Vector3::new(min.x, max.y, max.z),
+            ),
+            Gizmo(
+                Vector3::new(max.x, min.y, max.z),
+                Vector3::new(max.x, max.y, max.z),
+            ),
+            Gizmo(
+                Vector3::new(max.x, min.y, min.z),
+                Vector3::new(max.x, max.y, min.z),
+            ),
+        ]);
+    }
 }
 
-impl RenderPass for LinePass {
+impl RenderPass for GizmoPass {
     fn render(
         &self,
+        queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
         color_attachment: wgpu::RenderPassColorAttachment,
         depth_attachment: wgpu::RenderPassDepthStencilAttachment,
         bind_group: &wgpu::BindGroup,
     ) {
+        queue.write_buffer(
+            &self.buffer,
+            0,
+            bytemuck::cast_slice(self.gizmos.as_slice()),
+        );
+
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             color_attachments: &[Some(color_attachment)],
             depth_stencil_attachment: Some(depth_attachment),
@@ -118,6 +154,6 @@ impl RenderPass for LinePass {
         render_pass.set_pipeline(&self.pipeline);
         render_pass.set_bind_group(0, bind_group, &[]);
         render_pass.set_vertex_buffer(0, self.buffer.slice(..));
-        render_pass.draw(0..self.count as u32, 0..1);
+        render_pass.draw(0..2 * self.gizmos.len() as u32, 0..1);
     }
 }

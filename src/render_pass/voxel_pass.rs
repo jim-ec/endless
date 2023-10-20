@@ -232,6 +232,7 @@ const CUBE_VERTEX_INDICES: [[u16; 3]; 12] = [
 impl RenderPass for VoxelPass {
     fn render(
         &self,
+        _queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
         color_attachment: wgpu::RenderPassColorAttachment,
         depth_attachment: wgpu::RenderPassDepthStencilAttachment,
