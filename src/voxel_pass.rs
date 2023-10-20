@@ -1,12 +1,10 @@
 use crate::{
     grid::{self, Grid},
-    renderer::{self, DEPTH_FORMAT, SAMPLES},
+    renderer::{self, RenderPass, DEPTH_FORMAT, SAMPLES},
 };
 use cgmath::{vec3, Vector3};
 use derive_setters::Setters;
 use wgpu::util::DeviceExt;
-
-use super::RenderPass;
 
 #[derive(Debug, Setters)]
 pub struct VoxelPass {

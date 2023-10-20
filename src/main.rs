@@ -4,11 +4,12 @@ use pollster::FutureExt;
 
 mod app;
 mod camera;
+mod gizmo_pass;
 mod grid;
-mod render_pass;
 mod renderer;
 mod transform;
 mod util;
+mod voxel_pass;
 mod world;
 
 fn main() {

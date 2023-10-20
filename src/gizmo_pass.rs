@@ -1,8 +1,6 @@
 use cgmath::Vector3;
 
-use crate::renderer::{self, Renderer, DEPTH_FORMAT};
-
-use super::RenderPass;
+use crate::renderer::{self, RenderPass, Renderer, DEPTH_FORMAT};
 
 pub struct GizmoPass {
     gizmos: Vec<Gizmo>,

@@ -2,10 +2,11 @@ use cgmath::vec3;
 use noise::NoiseFn;
 
 use crate::{
+    gizmo_pass::GizmoPass,
     grid::{self, N},
-    render_pass::{gizmo_pass::GizmoPass, voxel_pass::VoxelPass},
     renderer::Renderer,
     util::{rescale, rgb},
+    voxel_pass::VoxelPass,
 };
 
 pub struct World {

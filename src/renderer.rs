@@ -1,6 +1,6 @@
 use winit::window::Window;
 
-use crate::{camera, render_pass::RenderPass};
+use crate::camera;
 
 pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth24Plus;
 pub const SAMPLES: u32 = 4;
@@ -19,6 +19,17 @@ pub struct Renderer {
     pub depth_texture: wgpu::Texture,
     pub depth_texture_view: wgpu::TextureView,
     pub shader: wgpu::ShaderModule,
+}
+
+pub trait RenderPass {
+    fn render(
+        &self,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        color_attachment: wgpu::RenderPassColorAttachment,
+        depth_attachment: wgpu::RenderPassDepthStencilAttachment,
+        bind_group: &wgpu::BindGroup,
+    );
 }
 
 impl Renderer {
@@ -223,36 +234,32 @@ impl Renderer {
 
         let mut command_encoder = self.device.create_command_encoder(&Default::default());
 
-        if let Some(first_pass) = passes.first() {
-            first_pass.render(
-                &self.queue,
-                &mut command_encoder,
-                wgpu::RenderPassColorAttachment {
-                    view: self.texture_view(&view),
-                    resolve_target: self.resolve_target(&view),
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.01,
-                            g: 0.01,
-                            b: 0.01,
-                            a: 1.0,
-                        }),
-                        store: true,
-                    },
-                },
-                wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.depth_texture_view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: true,
+        command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: None,
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: self.texture_view(&view),
+                resolve_target: self.resolve_target(&view),
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: 0.01,
+                        g: 0.01,
+                        b: 0.01,
+                        a: 1.0,
                     }),
-                    stencil_ops: None,
+                    store: true,
                 },
-                &self.bind_group,
-            );
-        }
+            })],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &self.depth_texture_view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(1.0),
+                    store: true,
+                }),
+                stencil_ops: None,
+            }),
+        });
 
-        for pass in &passes[1..] {
+        for pass in passes {
             pass.render(
                 &self.queue,
                 &mut command_encoder,
