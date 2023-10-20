@@ -42,11 +42,35 @@ impl<T: Default + Clone> Default for Grid<T> {
     }
 }
 
-pub fn coordinates() -> impl Iterator<Item = [usize; 3]> {
-    (0..N)
-        .cartesian_product(0..N)
-        .cartesian_product(0..N)
-        .map(|((x, y), z)| [x, y, z])
+#[derive(Clone, Copy, Default)]
+struct CoordinateIter<const D: usize>(Option<[usize; D]>);
+
+impl<const D: usize> Iterator for CoordinateIter<D> {
+    type Item = [usize; D];
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match &mut self.0 {
+            None => {
+                self.0 = Some([0; D]);
+                Some([0; D])
+            }
+            Some(co) => {
+                for i in (0..D).rev() {
+                    if co[i] < N - 1 {
+                        co[i] += 1;
+                        return Some(*co);
+                    } else {
+                        co[i] = 0;
+                    }
+                }
+                None
+            }
+        }
+    }
+}
+
+pub fn coordinates<const D: usize>() -> impl Iterator<Item = [usize; D]> {
+    CoordinateIter::default()
 }
 
 impl<T> Grid<T> {
