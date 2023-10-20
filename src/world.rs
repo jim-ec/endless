@@ -1,4 +1,3 @@
-use cgmath::vec3;
 use noise::NoiseFn;
 
 use crate::{
@@ -75,12 +74,9 @@ impl World {
             Sediment::Air => rgb(0, 0, 0),
         });
 
-        let mut gizmo_pass = GizmoPass::new(renderer);
-        gizmo_pass.aabb(vec3(0.0, 0.0, 0.0), vec3(N as f32, N as f32, N as f32));
-
         World {
             voxel_pass: VoxelPass::new(renderer, &shell, &color),
-            gizmo_pass,
+            gizmo_pass: GizmoPass::new(renderer),
         }
     }
 }
