@@ -7,7 +7,7 @@ mod camera;
 mod gizmo_pass;
 mod grid;
 mod renderer;
-mod transform;
+mod symmetry;
 mod util;
 mod voxel_pass;
 mod world;

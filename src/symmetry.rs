@@ -1,7 +1,7 @@
 use cgmath::{Matrix4, Quaternion, Vector3, Zero};
 use derive_setters::Setters;
 
-/// A symmetry in Euclidean space.
+/// A symmetry in homogenous Euclidean space.
 #[derive(Debug, Clone, Copy, Setters)]
 pub struct Symmetry {
     pub translation: Vector3<f64>,
