@@ -228,23 +228,8 @@ const CUBE_VERTEX_INDICES: [[u16; 3]; 12] = [
 ];
 
 impl RenderPass for VoxelPass {
-    fn render(
-        &self,
-        _queue: &wgpu::Queue,
-        encoder: &mut wgpu::CommandEncoder,
-        color_attachment: wgpu::RenderPassColorAttachment,
-        depth_attachment: wgpu::RenderPassDepthStencilAttachment,
-        bind_group: &wgpu::BindGroup,
-    ) {
-        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            color_attachments: &[Some(color_attachment)],
-            depth_stencil_attachment: Some(depth_attachment),
-            ..Default::default()
-        });
-
+    fn render<'p: 'r, 'r>(&'p self, _queue: &wgpu::Queue, render_pass: &mut wgpu::RenderPass<'r>) {
         render_pass.set_pipeline(&self.pipeline);
-        render_pass.set_bind_group(0, bind_group, &[]);
-
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_vertex_buffer(1, self.vertex_normal_buffer.slice(..));
         render_pass.set_vertex_buffer(2, self.voxel_position_buffer.slice(..));

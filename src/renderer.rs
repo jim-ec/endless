@@ -22,14 +22,7 @@ pub struct Renderer {
 }
 
 pub trait RenderPass {
-    fn render(
-        &self,
-        queue: &wgpu::Queue,
-        encoder: &mut wgpu::CommandEncoder,
-        color_attachment: wgpu::RenderPassColorAttachment,
-        depth_attachment: wgpu::RenderPassDepthStencilAttachment,
-        bind_group: &wgpu::BindGroup,
-    );
+    fn render<'p: 'r, 'r>(&'p self, queue: &wgpu::Queue, render_pass: &mut wgpu::RenderPass<'r>);
 }
 
 impl Renderer {
@@ -260,27 +253,29 @@ impl Renderer {
         });
 
         for pass in passes {
-            pass.render(
-                &self.queue,
-                &mut command_encoder,
-                wgpu::RenderPassColorAttachment {
+            let mut render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: self.texture_view(&view),
                     resolve_target: self.resolve_target(&view),
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: true,
                     },
-                },
-                wgpu::RenderPassDepthStencilAttachment {
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &self.depth_texture_view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: true,
                     }),
                     stencil_ops: None,
-                },
-                &self.bind_group,
-            );
+                }),
+                ..Default::default()
+            });
+
+            render_pass.set_bind_group(0, &self.bind_group, &[]);
+
+            pass.render(&self.queue, &mut render_pass);
         }
 
         self.queue.submit(Some(command_encoder.finish()));
