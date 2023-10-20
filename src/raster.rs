@@ -7,16 +7,16 @@ use itertools::Itertools;
 use crate::util::perf;
 
 pub const N: usize = 8;
-pub const WATER_LEVEL: usize = 2;
+pub const VOLUME: usize = N * N * N;
 
-pub const CAPACITY: usize = N * N * N;
+pub const WATER_LEVEL: usize = 2;
 
 #[derive(Clone)]
 pub struct Raster<T> {
     pub voxels: Vec<T>,
 }
 
-fn linear(x: usize, y: usize, z: usize) -> usize {
+fn linear([x, y, z]: [usize; 3]) -> usize {
     z + N * (y + N * x)
 }
 
@@ -25,21 +25,21 @@ impl<T> std::ops::Index<[usize; 3]> for Raster<T> {
 
     #[track_caller]
     fn index(&self, index: [usize; 3]) -> &Self::Output {
-        &self.voxels[linear(index[0], index[1], index[2])]
+        &self.voxels[linear(index)]
     }
 }
 
 impl<T> std::ops::IndexMut<[usize; 3]> for Raster<T> {
     #[track_caller]
     fn index_mut(&mut self, index: [usize; 3]) -> &mut Self::Output {
-        &mut self.voxels[linear(index[0], index[1], index[2])]
+        &mut self.voxels[linear(index)]
     }
 }
 
 impl<T: Default + Clone> Default for Raster<T> {
     fn default() -> Self {
         Self {
-            voxels: vec![T::default(); CAPACITY],
+            voxels: vec![T::default(); VOLUME],
         }
     }
 }
@@ -53,7 +53,7 @@ pub fn coordinates() -> impl Iterator<Item = [usize; 3]> {
 
 impl<T> Raster<T> {
     pub fn generate<F: FnMut([usize; 3]) -> T>(label: &str, mut f: F) -> Self {
-        let mut voxels = Vec::with_capacity(CAPACITY);
+        let mut voxels = Vec::with_capacity(VOLUME);
         perf(label, || {
             for co in coordinates() {
                 voxels.push(f(co));
@@ -123,7 +123,7 @@ bitflags! {
 }
 
 pub fn height_map<F: Fn(Vector2<f64>) -> f64>(f: F) -> Raster<bool> {
-    let mut voxels = Vec::with_capacity(CAPACITY);
+    let mut voxels = Vec::with_capacity(VOLUME);
 
     for (x, y) in (0..N).cartesian_product(0..N) {
         let position = vec2(x as f64 + 0.5, y as f64 + 0.5);
@@ -297,9 +297,9 @@ impl Raster<f32> {
                 ] {
                     if env.contains(e) {
                         let co = [
-                            (c[0] as isize + o[0]).clamp(0, CAPACITY as isize - 1) as usize,
-                            (c[1] as isize + o[1]).clamp(0, CAPACITY as isize - 1) as usize,
-                            (c[2] as isize + o[2]).clamp(0, CAPACITY as isize - 1) as usize,
+                            (c[0] as isize + o[0]).clamp(0, VOLUME as isize - 1) as usize,
+                            (c[1] as isize + o[1]).clamp(0, VOLUME as isize - 1) as usize,
+                            (c[2] as isize + o[2]).clamp(0, VOLUME as isize - 1) as usize,
                         ];
                         if mask[co] {
                             v += self[co];
