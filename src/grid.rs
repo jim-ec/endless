@@ -4,7 +4,7 @@ use bitflags::bitflags;
 use cgmath::{vec2, vec3, InnerSpace, Vector2, Vector3, Zero};
 use itertools::Itertools;
 
-use crate::util::perf;
+use crate::util::profile;
 
 pub const N: usize = 64;
 pub const VOLUME: usize = N * N * N;
@@ -50,9 +50,9 @@ pub fn coordinates() -> impl Iterator<Item = [usize; 3]> {
 }
 
 impl<T> Grid<T> {
-    pub fn generate<F: FnMut([usize; 3]) -> T>(label: &str, mut f: F) -> Self {
+    pub fn generate(label: &str, mut f: impl FnMut([usize; 3]) -> T) -> Self {
         let mut voxels = Vec::with_capacity(VOLUME);
-        perf(label, || {
+        profile(label, || {
             for co in coordinates() {
                 voxels.push(f(co));
             }
@@ -120,16 +120,17 @@ bitflags! {
     }
 }
 
-pub fn height_map<F: Fn(Vector2<f64>) -> f64>(f: F) -> Grid<bool> {
+pub fn height_map(f: impl Fn(Vector2<f64>) -> f64) -> Grid<bool> {
     let mut voxels = Vec::with_capacity(VOLUME);
 
-    for (x, y) in (0..N).cartesian_product(0..N) {
-        let position = vec2(x as f64 + 0.5, y as f64 + 0.5);
-
-        let h = (f(position).clamp(0.0, 1.0) * N as f64) as usize;
-        voxels.extend(std::iter::repeat(true).take(h));
-        voxels.extend(std::iter::repeat(false).take(N - h));
-    }
+    profile("Height map", || {
+        for (x, y) in (0..N).cartesian_product(0..N) {
+            let position = vec2(x as f64 + 0.5, y as f64 + 0.5);
+            let h = (f(position).clamp(0.0, 1.0) * N as f64) as usize;
+            voxels.extend(std::iter::repeat(true).take(h));
+            voxels.extend(std::iter::repeat(false).take(N - h));
+        }
+    });
 
     Grid { voxels }
 }

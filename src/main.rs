@@ -39,7 +39,7 @@ async fn run() {
         .unwrap();
 
     let mut renderer = renderer::Renderer::new(&window).await;
-    let world = util::perf("World generation", || world::World::new(&renderer));
+    let world = util::profile("World generation", || world::World::new(&renderer));
 
     let mut dragging = false;
     let mut camera = camera::Camera::initial();

@@ -5,7 +5,7 @@ use std::{
 
 use cgmath::{vec3, Vector3};
 
-pub fn perf<R, F: FnOnce() -> R>(label: &str, f: F) -> R {
+pub fn profile<R>(label: &str, f: impl FnOnce() -> R) -> R {
     let t0 = Instant::now();
     let r = f();
     let t1 = Instant::now();
