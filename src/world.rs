@@ -21,12 +21,17 @@ impl World {
         noise.frequency = 0.01;
         let noise = Turbulence::<_, Perlin>::new(noise);
 
-        let grid = grid::height_map(|v| {
-            let mut n = noise.get([v.x - 10.0, v.y - 10.0]);
+        let height_map: grid::Grid<f32, 2> = grid::Grid::generate("Height map", |[x, y]| {
+            let mut n = noise.get([x as f64 - 10.0, y as f64 - 10.0]) as f32;
             n = rescale(n, -1.0..1.0, 0.0..1.0);
             n = n.powf(2.0);
             n -= 0.1;
             n
+        });
+
+        let grid: grid::Grid<bool, 3> = grid::Grid::generate("Grid", |[x, y, z]| {
+            let h = height_map[[x, y]];
+            (z as f32) < h * N as f32
         });
 
         let env = grid.environment();

@@ -1,8 +1,7 @@
 use std::fmt::Debug;
 
 use bitflags::bitflags;
-use cgmath::{vec2, vec3, InnerSpace, Vector2, Vector3, Zero};
-use itertools::Itertools;
+use cgmath::{vec3, InnerSpace, Vector3, Zero};
 
 use crate::util::profile;
 
@@ -148,22 +147,6 @@ bitflags! {
         const NNP = 1 << 25;
         const NNN = 1 << 26;
     }
-}
-
-// TODO: Revise this function
-pub fn height_map(f: impl Fn(Vector2<f64>) -> f64) -> Grid<bool, 3> {
-    let mut voxels = Vec::with_capacity(VOLUME);
-
-    profile("Height map", || {
-        for (x, y) in (0..N).cartesian_product(0..N) {
-            let position = vec2(x as f64 + 0.5, y as f64 + 0.5);
-            let h = (f(position).clamp(0.0, 1.0) * N as f64) as usize;
-            voxels.extend(std::iter::repeat(true).take(h));
-            voxels.extend(std::iter::repeat(false).take(N - h));
-        }
-    });
-
-    Grid { voxels }
 }
 
 pub fn elevation() -> Grid<f32, 3> {
