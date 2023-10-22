@@ -1,5 +1,5 @@
 use crate::{
-    field::Field,
+    field::{Field, Vis},
     renderer::{self, RenderPass, DEPTH_FORMAT, SAMPLES},
 };
 use cgmath::{vec3, InnerSpace, Vector3};
@@ -14,7 +14,7 @@ pub struct VoxelMesh {
     position_buffer: wgpu::Buffer,
     normal_buffer: wgpu::Buffer,
     color_buffer: wgpu::Buffer,
-    voxel_count: usize,
+    vertex_count: usize,
 }
 
 pub struct VoxelPass<'a>(pub &'a VoxelPipeline, pub &'a VoxelMesh);
@@ -106,8 +106,9 @@ impl VoxelPipeline {
 
 impl VoxelMesh {
     pub fn new(
-        renderer: &renderer::Renderer,
+        renderer: &mut renderer::Renderer,
         field: &Field<bool, 3>,
+        vis: &Field<Vis, 3>,
         color: &Field<Vector3<f32>, 3>,
         translation: Vector3<isize>,
         scale: isize,
@@ -115,20 +116,6 @@ impl VoxelMesh {
         let mut positions: Vec<Vector3<f32>> = Vec::new();
         let mut colors: Vec<Vector3<f32>> = Vec::new();
         let mut normals: Vec<Vector3<f32>> = Vec::new();
-
-        let mut instance_vertices = vec![];
-        let mut instance_normals = vec![];
-        for [i, j, k] in CUBE_VERTEX_INDICES {
-            let vs = [
-                scale as f32 * CUBE_VERTICES[i as usize],
-                scale as f32 * CUBE_VERTICES[j as usize],
-                scale as f32 * CUBE_VERTICES[k as usize],
-            ];
-            instance_vertices.extend(vs);
-            instance_normals.extend(
-                std::iter::repeat((vs[2] - vs[0]).cross(vs[1] - vs[0]).normalize()).take(3),
-            );
-        }
 
         for [x, y, z] in field.coordinates() {
             if field[[x, y, z]] {
@@ -138,10 +125,39 @@ impl VoxelMesh {
                         translation.y as f32,
                         translation.z as f32,
                     );
-                for i in 0..instance_vertices.len() {
-                    positions.push(position + instance_vertices[i]);
-                    normals.push(instance_normals[i]);
-                    colors.push(color[[x, y, z]]);
+                let mut faces = vec![];
+                if vis[[x, y, z]].contains(Vis::XP) {
+                    faces.push(CUBE_FACE_X_1);
+                }
+                if vis[[x, y, z]].contains(Vis::XN) {
+                    faces.push(CUBE_FACE_X_0);
+                }
+                if vis[[x, y, z]].contains(Vis::YP) {
+                    faces.push(CUBE_FACE_Y_1);
+                }
+                if vis[[x, y, z]].contains(Vis::YN) {
+                    faces.push(CUBE_FACE_Y_0);
+                }
+                if vis[[x, y, z]].contains(Vis::ZP) {
+                    faces.push(CUBE_FACE_Z_1);
+                }
+                if vis[[x, y, z]].contains(Vis::ZN) {
+                    faces.push(CUBE_FACE_Z_0);
+                }
+                for face in faces {
+                    for [i, j, k] in face {
+                        let vs = [
+                            scale as f32 * CUBE_VERTICES[i as usize],
+                            scale as f32 * CUBE_VERTICES[j as usize],
+                            scale as f32 * CUBE_VERTICES[k as usize],
+                        ];
+                        positions.extend(vs.iter().map(|v| position + *v));
+                        normals.extend(
+                            std::iter::repeat((vs[2] - vs[0]).cross(vs[1] - vs[0]).normalize())
+                                .take(3),
+                        );
+                        colors.extend(std::iter::repeat(color[[x, y, z]]).take(3));
+                    }
                 }
             }
         }
@@ -186,11 +202,13 @@ impl VoxelMesh {
                 usage: wgpu::BufferUsages::VERTEX,
             });
 
+        renderer.triangle_count += positions.len() / 3;
+
         Self {
             position_buffer,
             normal_buffer,
             color_buffer,
-            voxel_count: colors.len(),
+            vertex_count: positions.len(),
         }
     }
 }
@@ -206,20 +224,12 @@ const CUBE_VERTICES: [Vector3<f32>; 8] = [
     vec3(1.0, 1.0, 1.0),
 ];
 
-const CUBE_VERTEX_INDICES: [[u16; 3]; 12] = [
-    [0, 2, 3],
-    [0, 3, 1],
-    [4, 5, 7],
-    [4, 7, 6],
-    [4, 0, 1],
-    [4, 1, 5],
-    [5, 1, 3],
-    [5, 3, 7],
-    [7, 3, 2],
-    [7, 2, 6],
-    [6, 2, 0],
-    [6, 0, 4],
-];
+const CUBE_FACE_X_0: [[u16; 3]; 2] = [[6, 2, 0], [6, 0, 4]];
+const CUBE_FACE_X_1: [[u16; 3]; 2] = [[5, 1, 3], [5, 3, 7]];
+const CUBE_FACE_Y_0: [[u16; 3]; 2] = [[4, 0, 1], [4, 1, 5]];
+const CUBE_FACE_Y_1: [[u16; 3]; 2] = [[7, 3, 2], [7, 2, 6]];
+const CUBE_FACE_Z_0: [[u16; 3]; 2] = [[0, 2, 3], [0, 3, 1]];
+const CUBE_FACE_Z_1: [[u16; 3]; 2] = [[4, 5, 7], [4, 7, 6]];
 
 impl<'a> RenderPass for VoxelPass<'a> {
     fn render<'p: 'r, 'r>(&'p self, _queue: &wgpu::Queue, render_pass: &mut wgpu::RenderPass<'r>) {
@@ -228,6 +238,6 @@ impl<'a> RenderPass for VoxelPass<'a> {
         render_pass.set_vertex_buffer(0, mesh.position_buffer.slice(..));
         render_pass.set_vertex_buffer(1, mesh.normal_buffer.slice(..));
         render_pass.set_vertex_buffer(2, mesh.color_buffer.slice(..));
-        render_pass.draw(0..mesh.voxel_count as u32, 0..1);
+        render_pass.draw(0..mesh.vertex_count as u32, 0..1);
     }
 }

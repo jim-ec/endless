@@ -19,6 +19,7 @@ pub struct Renderer {
     pub depth_texture: wgpu::Texture,
     pub depth_texture_view: wgpu::TextureView,
     pub shader: wgpu::ShaderModule,
+    pub triangle_count: usize,
 }
 
 pub trait RenderPass {
@@ -157,6 +158,7 @@ impl Renderer {
             depth_texture,
             buffer: uniform_buffer,
             shader,
+            triangle_count: 0,
         }
     }
 

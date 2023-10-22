@@ -26,13 +26,13 @@ pub struct Chunk {
 }
 
 impl World {
-    pub fn new(renderer: &Renderer) -> World {
+    pub fn new(renderer: &mut Renderer) -> World {
         println!("Voxels: {}x{}x{} = {}", N, N, N, N.pow(3));
 
         let mut chunks = HashMap::new();
 
-        for x in -1_isize..=1 {
-            for y in -1_isize..=1 {
+        for x in -3_isize..=3 {
+            for y in -3_isize..=3 {
                 let c = vec3(x, y, 0);
                 let fidelity = x.unsigned_abs() + y.unsigned_abs();
                 chunks.insert(c, Chunk::new(renderer, c, fidelity));
@@ -48,7 +48,7 @@ impl World {
 }
 
 impl Chunk {
-    pub fn new(renderer: &Renderer, translation: Vector3<isize>, fidelity: usize) -> Self {
+    pub fn new(renderer: &mut Renderer, translation: Vector3<isize>, fidelity: usize) -> Self {
         use noise::{Fbm, Perlin, Turbulence};
         let mut noise = Fbm::<Perlin>::new(0);
         noise.frequency = 0.01;
@@ -132,6 +132,7 @@ impl Chunk {
             voxel_mesh: VoxelMesh::new(
                 renderer,
                 &field.shell(&env),
+                &env.visibility(),
                 &color,
                 N as isize * translation,
                 scale,

@@ -41,7 +41,8 @@ async fn run() {
         .unwrap();
 
     let mut renderer = renderer::Renderer::new(&window).await;
-    let world = util::profile("World generation", || world::World::new(&renderer));
+    let world = util::profile("World generation", || world::World::new(&mut renderer));
+    println!("Triangle count: {}", renderer.triangle_count);
 
     let mut dragging = false;
     let mut camera = camera::Camera::initial();
