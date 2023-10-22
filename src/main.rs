@@ -38,14 +38,6 @@ async fn run() {
         .build(&event_loop)
         .unwrap();
 
-    println!(
-        "Voxels: {}x{}x{} = {}",
-        field::N,
-        field::N,
-        field::N,
-        field::N.pow(3)
-    );
-
     let mut renderer = renderer::Renderer::new(&window).await;
     let world = util::profile("World generation", || world::World::new(&renderer));
 

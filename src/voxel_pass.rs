@@ -1,5 +1,5 @@
 use crate::{
-    field::{self, Field},
+    field::Field,
     renderer::{self, RenderPass, DEPTH_FORMAT, SAMPLES},
 };
 use cgmath::{vec3, Vector3};
@@ -37,7 +37,7 @@ impl VoxelPass {
         let mut positions: Vec<Vector3<f32>> = Vec::new();
         let mut colors: Vec<Vector3<f32>> = Vec::new();
 
-        for [x, y, z] in field::coordinates() {
+        for [x, y, z] in field.coordinates() {
             if field[[x, y, z]] {
                 positions.push(vec3(x as f32, y as f32, z as f32));
                 colors.push(color[[x, y, z]]);

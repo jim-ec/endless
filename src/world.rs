@@ -1,12 +1,14 @@
 use noise::NoiseFn;
 
 use crate::{
-    field::{self, N},
+    field,
     gizmo_pass::GizmoPass,
     renderer::Renderer,
     util::{rescale, rgb},
     voxel_pass::VoxelPass,
 };
+
+pub const N: usize = 64;
 
 pub struct World {
     pub voxel_pass: VoxelPass,
@@ -20,6 +22,8 @@ impl World {
         noise.frequency = 0.01;
         let noise = Turbulence::<_, Perlin>::new(noise);
 
+        println!("Voxels: {}x{}x{} = {}", N, N, N, N.pow(3));
+
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         enum Sediment {
             Rock,
@@ -30,24 +34,24 @@ impl World {
 
         use field::Field;
 
-        let rock_height_map: Field<f32, 2> = Field::new("Rock Height Map", |[x, y]| {
+        let rock_height_map: Field<f32, 2> = Field::new("Rock Height Map", N, |[x, y]| {
             let mut n = noise.get([x as f64, y as f64]) as f32;
             n = rescale(n, -1.0..1.0, 0.1..1.0);
             n = n.powf(2.0);
             n
         });
-        let soil_height_map: Field<f32, 2> = Field::new("Soil Height Map", |[x, y]| {
+        let soil_height_map: Field<f32, 2> = Field::new("Soil Height Map", N, |[x, y]| {
             let mut n = noise.get([x as f64 + 20.0, y as f64 + 20.0]) as f32;
             n = rescale(n, -1.0..1.0, 0.1..0.3);
             n
         });
-        let sand_height_map: Field<f32, 2> = Field::new("Sand Height Map", |[x, y]| {
+        let sand_height_map: Field<f32, 2> = Field::new("Sand Height Map", N, |[x, y]| {
             let mut n = noise.get([x as f64 + 80.0, y as f64 + 80.0]) as f32;
             n = rescale(n, -1.0..1.0, 0.1..0.2);
             n
         });
 
-        let sediments: Field<Sediment, 3> = Field::new("Sediments", |[x, y, z]| {
+        let sediments: Field<Sediment, 3> = Field::new("Sediments", N, |[x, y, z]| {
             let rock = (rock_height_map[[x, y]] * N as f32) as usize;
             let soil = (soil_height_map[[x, y]] * N as f32) as usize;
             let sand = (sand_height_map[[x, y]] * N as f32) as usize;
@@ -63,7 +67,7 @@ impl World {
             }
         });
 
-        let field: Field<bool, 3> = Field::new("Field", |[x, y, z]| {
+        let field: Field<bool, 3> = Field::new("Field", N, |[x, y, z]| {
             let rock = (rock_height_map[[x, y]] * N as f32) as usize;
             let soil = (soil_height_map[[x, y]] * N as f32) as usize;
             let sand = (sand_height_map[[x, y]] * N as f32) as usize;

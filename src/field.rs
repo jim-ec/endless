@@ -5,22 +5,10 @@ use cgmath::{vec3, InnerSpace, Vector3, Zero};
 
 use crate::util::profile;
 
-pub const N: usize = 64;
-pub const VOLUME: usize = N * N * N;
-
 #[derive(Clone)]
 pub struct Field<T, const D: usize> {
     voxels: Vec<T>,
-}
-
-fn linear<const D: usize>(coordinate: [usize; D]) -> usize {
-    let mut index = 0;
-    for c in coordinate.iter().take(D - 1) {
-        index += c;
-        index *= N;
-    }
-    index += coordinate[D - 1];
-    index
+    extent: usize,
 }
 
 impl<T, const D: usize> std::ops::Index<[usize; D]> for Field<T, D> {
@@ -28,27 +16,26 @@ impl<T, const D: usize> std::ops::Index<[usize; D]> for Field<T, D> {
 
     #[track_caller]
     fn index(&self, index: [usize; D]) -> &Self::Output {
-        &self.voxels[linear(index)]
+        &self.voxels[self.linear(index)]
     }
 }
 
 impl<T, const D: usize> std::ops::IndexMut<[usize; D]> for Field<T, D> {
     #[track_caller]
     fn index_mut(&mut self, index: [usize; D]) -> &mut Self::Output {
-        &mut self.voxels[linear(index)]
+        let linear_index = self.linear(index);
+        &mut self.voxels[linear_index]
     }
 }
 
-impl<T: Default + Clone, const D: usize> Default for Field<T, D> {
-    fn default() -> Self {
-        Self {
-            voxels: vec![T::default(); VOLUME],
-        }
+#[derive(Clone, Copy)]
+struct CoordinateIter<const D: usize>(Option<[usize; D]>, usize);
+
+impl<const D: usize> CoordinateIter<D> {
+    fn new(extent: usize) -> Self {
+        CoordinateIter(None, extent)
     }
 }
-
-#[derive(Clone, Copy, Default)]
-struct CoordinateIter<const D: usize>(Option<[usize; D]>);
 
 impl<const D: usize> Iterator for CoordinateIter<D> {
     type Item = [usize; D];
@@ -61,7 +48,7 @@ impl<const D: usize> Iterator for CoordinateIter<D> {
             }
             Some(co) => {
                 for i in (0..D).rev() {
-                    if co[i] < N - 1 {
+                    if co[i] < self.1 - 1 {
                         co[i] += 1;
                         return Some(*co);
                     } else {
@@ -74,25 +61,39 @@ impl<const D: usize> Iterator for CoordinateIter<D> {
     }
 }
 
-pub fn coordinates<const D: usize>() -> impl Iterator<Item = [usize; D]> {
-    CoordinateIter::default()
+pub fn coordinates<const D: usize>(extent: usize) -> impl Iterator<Item = [usize; D]> {
+    CoordinateIter::new(extent)
 }
 
 impl<T, const D: usize> Field<T, D> {
-    pub fn new(label: &str, mut f: impl FnMut([usize; D]) -> T) -> Self {
-        let mut voxels = Vec::with_capacity(VOLUME);
+    pub fn new(label: &str, extent: usize, mut f: impl FnMut([usize; D]) -> T) -> Self {
+        let mut voxels = Vec::with_capacity(extent.pow(3));
         profile(label, || {
-            for co in coordinates() {
+            for co in coordinates(extent) {
                 voxels.push(f(co));
             }
         });
-        Field { voxels }
+        Field { voxels, extent }
+    }
+
+    pub fn coordinates(&self) -> impl Iterator<Item = [usize; D]> {
+        coordinates(self.extent)
+    }
+
+    fn linear(&self, coordinate: [usize; D]) -> usize {
+        let mut index = 0;
+        for c in coordinate.iter().take(D - 1) {
+            index += c;
+            index *= self.extent;
+        }
+        index += coordinate[D - 1];
+        index
     }
 }
 
 impl<T: Copy, const D: usize> Field<T, D> {
     pub fn map<R>(&self, label: &str, f: impl Fn(T) -> R) -> Field<R, D> {
-        Field::new(label, |co| f(self[co]))
+        Field::new(label, self.extent, |co| f(self[co]))
     }
 
     pub fn map_with_coordinate<R>(
@@ -100,7 +101,7 @@ impl<T: Copy, const D: usize> Field<T, D> {
         label: &str,
         mut f: impl FnMut(T, [usize; D]) -> R,
     ) -> Field<R, D> {
-        Field::new(label, |co| f(self[co], co))
+        Field::new(label, self.extent, |co| f(self[co], co))
     }
 }
 
@@ -149,21 +150,17 @@ bitflags! {
     }
 }
 
-pub fn elevation() -> Field<f32, 3> {
-    Field::new("Elevation", |[_, _, z]| z as f32 / N as f32)
-}
-
 impl Field<bool, 3> {
     /// Compute the direct neighourhood of each voxel.
     pub fn environment(&self) -> Field<Env, 3> {
         self.map_with_coordinate("Environment", |set, [x, y, z]| {
             let mut env = Env::empty();
 
-            let xp = x < N - 1;
+            let xp = x < self.extent - 1;
             let xn = x > 0;
-            let yp = y < N - 1;
+            let yp = y < self.extent - 1;
             let yn = y > 0;
-            let zp = z < N - 1;
+            let zp = z < self.extent - 1;
             let zn = z > 0;
 
             env.set(Env::ZZZ, set);
@@ -209,11 +206,11 @@ impl Field<Env, 3> {
         self.map_with_coordinate("Visibility", |env, [x, y, z]| {
             let mut vis = Vis::empty();
 
-            let xp = x < N - 1;
+            let xp = x < self.extent - 1;
             let xn = x > 0;
-            let yp = y < N - 1;
+            let yp = y < self.extent - 1;
             let yn = y > 0;
-            let zp = z < N - 1;
+            let zp = z < self.extent - 1;
             let zn = z > 0;
 
             vis.set(Vis::XP, xp && !env.contains(Env::PZZ));
@@ -317,10 +314,11 @@ impl<T: Copy + std::ops::AddAssign<T> + std::ops::DivAssign<f32>> Field<T, 3> {
                     (Env::NNN, [-1, -1, -1]),
                 ] {
                     if env.contains(e) {
+                        let volume = self.extent.pow(3) as isize;
                         let co = [
-                            (c[0] as isize + o[0]).clamp(0, VOLUME as isize - 1) as usize,
-                            (c[1] as isize + o[1]).clamp(0, VOLUME as isize - 1) as usize,
-                            (c[2] as isize + o[2]).clamp(0, VOLUME as isize - 1) as usize,
+                            (c[0] as isize + o[0]).clamp(0, volume - 1) as usize,
+                            (c[1] as isize + o[1]).clamp(0, volume - 1) as usize,
+                            (c[2] as isize + o[2]).clamp(0, volume - 1) as usize,
                         ];
                         if mask[co] {
                             v += self[co];
