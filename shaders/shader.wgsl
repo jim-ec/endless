@@ -7,10 +7,9 @@ struct Camera {
 @group(0) @binding(0) var<uniform> camera: Camera;
 
 struct In {
-    @location(0) vertex: vec3<f32>,
+    @location(0) position: vec3<f32>,
     @location(1) normal: vec3<f32>,
-    @location(2) position: vec3<f32>,
-    @location(3) color: vec3<f32>,
+    @location(2) color: vec3<f32>,
 }
 
 struct Out {
@@ -24,7 +23,7 @@ struct Out {
 fn voxel_vertex(in: In) -> Out {
     var out: Out;
 
-    let position = vec4(in.vertex + in.position, 1.0);
+    let position = vec4(in.position, 1.0);
     out.clip_position = camera.proj * camera.view * position;
     out.position = position.xyz / position.w;
 

@@ -2,19 +2,18 @@ use crate::{
     field::Field,
     renderer::{self, RenderPass, DEPTH_FORMAT, SAMPLES},
 };
-use cgmath::{vec3, Vector3};
+use cgmath::{vec3, InnerSpace, Vector3};
 use wgpu::util::DeviceExt;
 
 pub struct VoxelPipeline {
     pipeline: wgpu::RenderPipeline,
-    vertex_buffer: wgpu::Buffer,
-    vertex_normal_buffer: wgpu::Buffer,
 }
 
 #[derive(Debug)]
 pub struct VoxelMesh {
-    voxel_position_buffer: wgpu::Buffer,
-    voxel_color_buffer: wgpu::Buffer,
+    position_buffer: wgpu::Buffer,
+    normal_buffer: wgpu::Buffer,
+    color_buffer: wgpu::Buffer,
     voxel_count: usize,
 }
 
@@ -22,45 +21,6 @@ pub struct VoxelPass<'a>(pub &'a VoxelPipeline, pub &'a VoxelMesh);
 
 impl VoxelPipeline {
     pub fn new(renderer: &renderer::Renderer) -> Self {
-        let mut vertices: Vec<Vector3<f32>> = Vec::new();
-        let mut vertex_normals: Vec<Vector3<f32>> = Vec::new();
-        for [i, j, k] in CUBE_VERTEX_INDICES {
-            let vs = [
-                CUBE_VERTICES[i as usize],
-                CUBE_VERTICES[j as usize],
-                CUBE_VERTICES[k as usize],
-            ];
-            vertices.extend(vs);
-            vertex_normals.extend(std::iter::repeat((vs[2] - vs[0]).cross(vs[1] - vs[0])).take(3));
-        }
-
-        let vertex_buffer = renderer
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: None,
-                contents: unsafe {
-                    std::slice::from_raw_parts(
-                        vertices.as_ptr() as *const u8,
-                        vertices.len() * std::mem::size_of::<Vector3<f32>>(),
-                    )
-                },
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-
-        let vertex_normal_buffer =
-            renderer
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: None,
-                    contents: unsafe {
-                        std::slice::from_raw_parts(
-                            vertex_normals.as_ptr() as *const u8,
-                            vertex_normals.len() * std::mem::size_of::<Vector3<f32>>(),
-                        )
-                    },
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
-
         let pipeline = renderer
             .device
             .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -98,20 +58,10 @@ impl VoxelPipeline {
                         wgpu::VertexBufferLayout {
                             array_stride: std::mem::size_of::<Vector3<f32>>()
                                 as wgpu::BufferAddress,
-                            step_mode: wgpu::VertexStepMode::Instance,
+                            step_mode: wgpu::VertexStepMode::Vertex,
                             attributes: &[wgpu::VertexAttribute {
                                 offset: 0,
                                 shader_location: 2,
-                                format: wgpu::VertexFormat::Float32x4,
-                            }],
-                        },
-                        wgpu::VertexBufferLayout {
-                            array_stride: std::mem::size_of::<Vector3<f32>>()
-                                as wgpu::BufferAddress,
-                            step_mode: wgpu::VertexStepMode::Instance,
-                            attributes: &[wgpu::VertexAttribute {
-                                offset: 0,
-                                shader_location: 3,
                                 format: wgpu::VertexFormat::Float32x4,
                             }],
                         },
@@ -150,11 +100,7 @@ impl VoxelPipeline {
                 multiview: None,
             });
 
-        Self {
-            pipeline,
-            vertex_buffer,
-            vertex_normal_buffer,
-        }
+        Self { pipeline }
     }
 }
 
@@ -164,25 +110,43 @@ impl VoxelMesh {
         field: &Field<bool, 3>,
         color: &Field<Vector3<f32>, 3>,
         translation: Vector3<isize>,
+        scale: isize,
     ) -> Self {
         let mut positions: Vec<Vector3<f32>> = Vec::new();
         let mut colors: Vec<Vector3<f32>> = Vec::new();
+        let mut normals: Vec<Vector3<f32>> = Vec::new();
+
+        let mut instance_vertices = vec![];
+        let mut instance_normals = vec![];
+        for [i, j, k] in CUBE_VERTEX_INDICES {
+            let vs = [
+                scale as f32 * CUBE_VERTICES[i as usize],
+                scale as f32 * CUBE_VERTICES[j as usize],
+                scale as f32 * CUBE_VERTICES[k as usize],
+            ];
+            instance_vertices.extend(vs);
+            instance_normals.extend(
+                std::iter::repeat((vs[2] - vs[0]).cross(vs[1] - vs[0]).normalize()).take(3),
+            );
+        }
 
         for [x, y, z] in field.coordinates() {
             if field[[x, y, z]] {
-                positions.push(
-                    vec3(x as f32, y as f32, z as f32)
-                        + vec3(
-                            translation.x as f32,
-                            translation.y as f32,
-                            translation.z as f32,
-                        ),
-                );
-                colors.push(color[[x, y, z]]);
+                let position = scale as f32 * vec3(x as f32, y as f32, z as f32)
+                    + vec3(
+                        translation.x as f32,
+                        translation.y as f32,
+                        translation.z as f32,
+                    );
+                for i in 0..instance_vertices.len() {
+                    positions.push(position + instance_vertices[i]);
+                    normals.push(instance_normals[i]);
+                    colors.push(color[[x, y, z]]);
+                }
             }
         }
 
-        let voxel_position_buffer =
+        let position_buffer =
             renderer
                 .device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -196,23 +160,36 @@ impl VoxelMesh {
                     usage: wgpu::BufferUsages::VERTEX,
                 });
 
-        let voxel_color_buffer =
-            renderer
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: None,
-                    contents: unsafe {
-                        std::slice::from_raw_parts(
-                            colors.as_ptr() as *const u8,
-                            colors.len() * std::mem::size_of::<Vector3<f32>>(),
-                        )
-                    },
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
+        let normal_buffer = renderer
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents: unsafe {
+                    std::slice::from_raw_parts(
+                        normals.as_ptr() as *const u8,
+                        normals.len() * std::mem::size_of::<Vector3<f32>>(),
+                    )
+                },
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+
+        let color_buffer = renderer
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents: unsafe {
+                    std::slice::from_raw_parts(
+                        colors.as_ptr() as *const u8,
+                        colors.len() * std::mem::size_of::<Vector3<f32>>(),
+                    )
+                },
+                usage: wgpu::BufferUsages::VERTEX,
+            });
 
         Self {
-            voxel_position_buffer,
-            voxel_color_buffer,
+            position_buffer,
+            normal_buffer,
+            color_buffer,
             voxel_count: colors.len(),
         }
     }
@@ -248,10 +225,9 @@ impl<'a> RenderPass for VoxelPass<'a> {
     fn render<'p: 'r, 'r>(&'p self, _queue: &wgpu::Queue, render_pass: &mut wgpu::RenderPass<'r>) {
         let VoxelPass(pipeline, mesh) = self;
         render_pass.set_pipeline(&pipeline.pipeline);
-        render_pass.set_vertex_buffer(0, pipeline.vertex_buffer.slice(..));
-        render_pass.set_vertex_buffer(1, pipeline.vertex_normal_buffer.slice(..));
-        render_pass.set_vertex_buffer(2, mesh.voxel_position_buffer.slice(..));
-        render_pass.set_vertex_buffer(3, mesh.voxel_color_buffer.slice(..));
-        render_pass.draw(0..3 * 12, 0..mesh.voxel_count as u32);
+        render_pass.set_vertex_buffer(0, mesh.position_buffer.slice(..));
+        render_pass.set_vertex_buffer(1, mesh.normal_buffer.slice(..));
+        render_pass.set_vertex_buffer(2, mesh.color_buffer.slice(..));
+        render_pass.draw(0..mesh.voxel_count as u32, 0..1);
     }
 }
