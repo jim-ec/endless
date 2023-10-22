@@ -1,8 +1,8 @@
 use noise::NoiseFn;
 
 use crate::{
+    field::{self, N},
     gizmo_pass::GizmoPass,
-    grid::{self, N},
     renderer::Renderer,
     util::{rescale, rgb},
     voxel_pass::VoxelPass,
@@ -28,24 +28,26 @@ impl World {
             Air,
         }
 
-        let rock_height_map: grid::Grid<f32, 2> = grid::Grid::generate("Height map", |[x, y]| {
+        use field::Field;
+
+        let rock_height_map: Field<f32, 2> = Field::new("Rock Height Map", |[x, y]| {
             let mut n = noise.get([x as f64, y as f64]) as f32;
             n = rescale(n, -1.0..1.0, 0.1..1.0);
             n = n.powf(2.0);
             n
         });
-        let soil_height_map: grid::Grid<f32, 2> = grid::Grid::generate("Height map", |[x, y]| {
+        let soil_height_map: Field<f32, 2> = Field::new("Soil Height Map", |[x, y]| {
             let mut n = noise.get([x as f64 + 20.0, y as f64 + 20.0]) as f32;
             n = rescale(n, -1.0..1.0, 0.1..0.3);
             n
         });
-        let sand_height_map: grid::Grid<f32, 2> = grid::Grid::generate("Height map", |[x, y]| {
+        let sand_height_map: Field<f32, 2> = Field::new("Sand Height Map", |[x, y]| {
             let mut n = noise.get([x as f64 + 80.0, y as f64 + 80.0]) as f32;
             n = rescale(n, -1.0..1.0, 0.1..0.2);
             n
         });
 
-        let sediments: grid::Grid<Sediment, 3> = grid::Grid::generate("Sediments", |[x, y, z]| {
+        let sediments: Field<Sediment, 3> = Field::new("Sediments", |[x, y, z]| {
             let rock = (rock_height_map[[x, y]] * N as f32) as usize;
             let soil = (soil_height_map[[x, y]] * N as f32) as usize;
             let sand = (sand_height_map[[x, y]] * N as f32) as usize;
@@ -61,11 +63,12 @@ impl World {
             }
         });
 
-        let grid = sediments.map("Occupancy", |s| !matches!(s, Sediment::Air));
-
-        let env = grid.environment();
-
-        let shell = grid.shell(&env);
+        let field: Field<bool, 3> = Field::new("Field", |[x, y, z]| {
+            let rock = (rock_height_map[[x, y]] * N as f32) as usize;
+            let soil = (soil_height_map[[x, y]] * N as f32) as usize;
+            let sand = (sand_height_map[[x, y]] * N as f32) as usize;
+            z < rock + soil + sand
+        });
 
         let color = sediments.map("Color", |s| match s {
             Sediment::Rock => rgb(40, 40, 50),
@@ -75,7 +78,7 @@ impl World {
         });
 
         World {
-            voxel_pass: VoxelPass::new(renderer, &shell, &color),
+            voxel_pass: VoxelPass::new(renderer, &field, &color),
             gizmo_pass: GizmoPass::new(renderer),
         }
     }

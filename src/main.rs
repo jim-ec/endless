@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
 mod camera;
+mod field;
 mod gizmo_pass;
-mod grid;
 mod renderer;
 mod symmetry;
 mod util;
@@ -40,10 +40,10 @@ async fn run() {
 
     println!(
         "Voxels: {}x{}x{} = {}",
-        grid::N,
-        grid::N,
-        grid::N,
-        grid::N.pow(3)
+        field::N,
+        field::N,
+        field::N,
+        field::N.pow(3)
     );
 
     let mut renderer = renderer::Renderer::new(&window).await;

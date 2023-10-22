@@ -9,8 +9,8 @@ pub const N: usize = 64;
 pub const VOLUME: usize = N * N * N;
 
 #[derive(Clone)]
-pub struct Grid<T, const D: usize> {
-    pub voxels: Vec<T>,
+pub struct Field<T, const D: usize> {
+    voxels: Vec<T>,
 }
 
 fn linear<const D: usize>(coordinate: [usize; D]) -> usize {
@@ -23,7 +23,7 @@ fn linear<const D: usize>(coordinate: [usize; D]) -> usize {
     index
 }
 
-impl<T, const D: usize> std::ops::Index<[usize; D]> for Grid<T, D> {
+impl<T, const D: usize> std::ops::Index<[usize; D]> for Field<T, D> {
     type Output = T;
 
     #[track_caller]
@@ -32,14 +32,14 @@ impl<T, const D: usize> std::ops::Index<[usize; D]> for Grid<T, D> {
     }
 }
 
-impl<T, const D: usize> std::ops::IndexMut<[usize; D]> for Grid<T, D> {
+impl<T, const D: usize> std::ops::IndexMut<[usize; D]> for Field<T, D> {
     #[track_caller]
     fn index_mut(&mut self, index: [usize; D]) -> &mut Self::Output {
         &mut self.voxels[linear(index)]
     }
 }
 
-impl<T: Default + Clone, const D: usize> Default for Grid<T, D> {
+impl<T: Default + Clone, const D: usize> Default for Field<T, D> {
     fn default() -> Self {
         Self {
             voxels: vec![T::default(); VOLUME],
@@ -78,29 +78,29 @@ pub fn coordinates<const D: usize>() -> impl Iterator<Item = [usize; D]> {
     CoordinateIter::default()
 }
 
-impl<T, const D: usize> Grid<T, D> {
-    pub fn generate(label: &str, mut f: impl FnMut([usize; D]) -> T) -> Self {
+impl<T, const D: usize> Field<T, D> {
+    pub fn new(label: &str, mut f: impl FnMut([usize; D]) -> T) -> Self {
         let mut voxels = Vec::with_capacity(VOLUME);
         profile(label, || {
             for co in coordinates() {
                 voxels.push(f(co));
             }
         });
-        Grid { voxels }
+        Field { voxels }
     }
 }
 
-impl<T: Copy, const D: usize> Grid<T, D> {
-    pub fn map<R>(&self, label: &str, f: impl Fn(T) -> R) -> Grid<R, D> {
-        Grid::generate(label, |co| f(self[co]))
+impl<T: Copy, const D: usize> Field<T, D> {
+    pub fn map<R>(&self, label: &str, f: impl Fn(T) -> R) -> Field<R, D> {
+        Field::new(label, |co| f(self[co]))
     }
 
     pub fn map_with_coordinate<R>(
         &self,
         label: &str,
         mut f: impl FnMut(T, [usize; D]) -> R,
-    ) -> Grid<R, D> {
-        Grid::generate(label, |co| f(self[co], co))
+    ) -> Field<R, D> {
+        Field::new(label, |co| f(self[co], co))
     }
 }
 
@@ -149,13 +149,13 @@ bitflags! {
     }
 }
 
-pub fn elevation() -> Grid<f32, 3> {
-    Grid::generate("Elevation", |[_, _, z]| z as f32 / N as f32)
+pub fn elevation() -> Field<f32, 3> {
+    Field::new("Elevation", |[_, _, z]| z as f32 / N as f32)
 }
 
-impl Grid<bool, 3> {
+impl Field<bool, 3> {
     /// Compute the direct neighourhood of each voxel.
-    pub fn environment(&self) -> Grid<Env, 3> {
+    pub fn environment(&self) -> Field<Env, 3> {
         self.map_with_coordinate("Environment", |set, [x, y, z]| {
             let mut env = Env::empty();
 
@@ -197,15 +197,15 @@ impl Grid<bool, 3> {
         })
     }
 
-    pub fn shell(&self, env: &Grid<Env, 3>) -> Grid<bool, 3> {
+    pub fn shell(&self, env: &Field<Env, 3>) -> Field<bool, 3> {
         self.map_with_coordinate("Shell", |set, c| set && !env[c].is_all())
     }
 }
 
-impl Grid<Env, 3> {
+impl Field<Env, 3> {
     /// Compute visible faces of each voxel i.e. faces that are not internal.
-    /// Faces at the grid boundary are not considered to be visible.
-    pub fn visibility(&self) -> Grid<Vis, 3> {
+    /// Faces at the field boundary are not considered to be visible.
+    pub fn visibility(&self) -> Field<Vis, 3> {
         self.map_with_coordinate("Visibility", |env, [x, y, z]| {
             let mut vis = Vis::empty();
 
@@ -227,8 +227,8 @@ impl Grid<Env, 3> {
     }
 }
 
-impl Grid<Vis, 3> {
-    pub fn normals(&self) -> Grid<Vector3<f32>, 3> {
+impl Field<Vis, 3> {
+    pub fn normals(&self) -> Field<Vector3<f32>, 3> {
         self.map("Normals", |vis| {
             let mut n = Vector3::zero();
 
@@ -259,7 +259,7 @@ impl Grid<Vis, 3> {
         })
     }
 
-    pub fn coverage(&self) -> Grid<f32, 3> {
+    pub fn coverage(&self) -> Field<f32, 3> {
         self.map("Coverage", |v| {
             let count = v.bits().count_ones();
             count as f32 / 8.0
@@ -267,8 +267,8 @@ impl Grid<Vis, 3> {
     }
 }
 
-impl<const D: usize> Grid<f32, D> {
-    pub fn grayscale(&self) -> Grid<Vector3<f32>, D> {
+impl<const D: usize> Field<f32, D> {
+    pub fn grayscale(&self) -> Field<Vector3<f32>, D> {
         self.map("Grayscale", |f| {
             let f = f.powf(2.2);
             vec3(f, f, f)
@@ -276,14 +276,14 @@ impl<const D: usize> Grid<f32, D> {
     }
 }
 
-impl<const D: usize> Grid<Vector3<f32>, D> {
-    pub fn steepness(&self) -> Grid<f32, D> {
+impl<const D: usize> Field<Vector3<f32>, D> {
+    pub fn steepness(&self) -> Field<f32, D> {
         self.map("Steepness", |n| 1.0 - n.dot(vec3(0.0, 0.0, 1.0)))
     }
 }
 
-impl Grid<f32, 3> {
-    pub fn smooth(&self, mask: &Grid<bool, 3>, env: &Grid<Env, 3>) -> Grid<f32, 3> {
+impl<T: Copy + std::ops::AddAssign<T> + std::ops::DivAssign<f32>> Field<T, 3> {
+    pub fn smooth(&self, mask: &Field<bool, 3>, env: &Field<Env, 3>) -> Field<T, 3> {
         self.map_with_coordinate("Smooth", |mut v, c| {
             let mut count: usize = 1;
             if mask[c] {
@@ -328,10 +328,9 @@ impl Grid<f32, 3> {
                         }
                     }
                 }
-                v / count as f32
-            } else {
-                v
+                v /= count as f32
             }
+            v
         })
     }
 }

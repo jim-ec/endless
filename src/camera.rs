@@ -2,7 +2,7 @@ use std::f64::consts::TAU;
 
 use cgmath::{vec3, Matrix4, Quaternion, Rotation3, SquareMatrix, Vector3, Vector4};
 
-use crate::grid::N;
+use crate::field::N;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Camera {
