@@ -5,13 +5,14 @@ use crate::{
     gizmo_pass::GizmoPass,
     renderer::Renderer,
     util::{rescale, rgb},
-    voxel_pass::VoxelPass,
+    voxel_pass::{VoxelMesh, VoxelPipeline},
 };
 
 pub const N: usize = 64;
 
 pub struct World {
-    pub voxel_pass: VoxelPass,
+    pub voxel_pipeline: VoxelPipeline,
+    pub voxel_mesh: VoxelMesh,
     pub gizmo_pass: GizmoPass,
 }
 
@@ -82,7 +83,8 @@ impl World {
         });
 
         World {
-            voxel_pass: VoxelPass::new(renderer, &field, &color),
+            voxel_pipeline: VoxelPipeline::new(renderer),
+            voxel_mesh: VoxelMesh::new(renderer, &field, &color),
             gizmo_pass: GizmoPass::new(renderer),
         }
     }

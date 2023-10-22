@@ -15,6 +15,7 @@ use std::{
     f64::consts::TAU,
     time::{Duration, Instant},
 };
+use voxel_pass::VoxelPass;
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
@@ -148,7 +149,9 @@ async fn run() {
                     .distance
                     .lerp(camera_target.distance, CAMERA_RESPONSIVNESS);
 
-                match renderer.render(&camera, &[&world.voxel_pass, &world.gizmo_pass]) {
+                let voxel_pass = VoxelPass(&world.voxel_pipeline, &world.voxel_mesh);
+
+                match renderer.render(&camera, &[&voxel_pass, &world.gizmo_pass]) {
                     Ok(_) => {}
                     Err(wgpu::SurfaceError::Lost) => renderer.resize(renderer.size),
                     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
