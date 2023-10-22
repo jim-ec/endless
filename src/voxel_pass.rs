@@ -163,13 +163,21 @@ impl VoxelMesh {
         renderer: &renderer::Renderer,
         field: &Field<bool, 3>,
         color: &Field<Vector3<f32>, 3>,
+        translation: Vector3<isize>,
     ) -> Self {
         let mut positions: Vec<Vector3<f32>> = Vec::new();
         let mut colors: Vec<Vector3<f32>> = Vec::new();
 
         for [x, y, z] in field.coordinates() {
             if field[[x, y, z]] {
-                positions.push(vec3(x as f32, y as f32, z as f32));
+                positions.push(
+                    vec3(x as f32, y as f32, z as f32)
+                        + vec3(
+                            translation.x as f32,
+                            translation.y as f32,
+                            translation.z as f32,
+                        ),
+                );
                 colors.push(color[[x, y, z]]);
             }
         }

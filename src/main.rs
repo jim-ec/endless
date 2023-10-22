@@ -11,6 +11,7 @@ mod world;
 
 use lerp::Lerp;
 use pollster::FutureExt;
+use renderer::RenderPass;
 use std::{
     f64::consts::TAU,
     time::{Duration, Instant},
@@ -149,9 +150,16 @@ async fn run() {
                     .distance
                     .lerp(camera_target.distance, CAMERA_RESPONSIVNESS);
 
-                let voxel_pass = VoxelPass(&world.voxel_pipeline, &world.voxel_mesh);
+                let mut passes: Vec<&dyn RenderPass> = vec![];
+                passes.push(&world.gizmo_pass);
+                let mut voxel_passes = vec![];
+                passes.push(&world.gizmo_pass);
+                for chunk in world.chunks.values() {
+                    voxel_passes.push(VoxelPass(&world.voxel_pipeline, &chunk.voxel_mesh));
+                }
+                passes.extend(voxel_passes.iter().map(|p| p as &dyn RenderPass));
 
-                match renderer.render(&camera, &[&voxel_pass, &world.gizmo_pass]) {
+                match renderer.render(&camera, &passes) {
                     Ok(_) => {}
                     Err(wgpu::SurfaceError::Lost) => renderer.resize(renderer.size),
                     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
