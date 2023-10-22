@@ -3,7 +3,7 @@ use winit::window::Window;
 use crate::camera;
 
 pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth24Plus;
-pub const SAMPLES: u32 = 4;
+pub const SAMPLES: u32 = 1;
 
 pub struct Renderer {
     surface: wgpu::Surface,

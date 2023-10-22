@@ -31,11 +31,16 @@ impl World {
 
         let mut chunks = HashMap::new();
 
-        for x in -3_isize..=3 {
-            for y in -3_isize..=3 {
+        let n: isize = 6;
+        for x in -n..=n {
+            for y in -n..=n {
                 let c = vec3(x, y, 0);
                 let fidelity = x.unsigned_abs() + y.unsigned_abs();
-                chunks.insert(c, Chunk::new(renderer, c, fidelity));
+                let fidelity = fidelity >> 2;
+
+                if N >> fidelity > 0 {
+                    chunks.insert(c, Chunk::new(renderer, c, fidelity));
+                }
             }
         }
 

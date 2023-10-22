@@ -11,10 +11,14 @@ pub struct VoxelPipeline {
 
 #[derive(Debug)]
 pub struct VoxelMesh {
-    position_buffer: wgpu::Buffer,
-    normal_buffer: wgpu::Buffer,
-    color_buffer: wgpu::Buffer,
+    vertex_buffer: wgpu::Buffer,
     vertex_count: usize,
+}
+
+struct Vertex {
+    position: Vector3<f32>,
+    normal: Vector3<f32>,
+    color: Vector3<f32>,
 }
 
 pub struct VoxelPass<'a>(pub &'a VoxelPipeline, pub &'a VoxelMesh);
@@ -34,38 +38,29 @@ impl VoxelPipeline {
                 vertex: wgpu::VertexState {
                     module: &renderer.shader,
                     entry_point: "voxel_vertex",
-                    buffers: &[
-                        wgpu::VertexBufferLayout {
-                            array_stride: std::mem::size_of::<Vector3<f32>>()
-                                as wgpu::BufferAddress,
-                            step_mode: wgpu::VertexStepMode::Vertex,
-                            attributes: &[wgpu::VertexAttribute {
-                                offset: 0,
+                    buffers: &[wgpu::VertexBufferLayout {
+                        array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &[
+                            wgpu::VertexAttribute {
+                                offset: memoffset::offset_of!(Vertex, position)
+                                    as wgpu::BufferAddress,
                                 shader_location: 0,
-                                format: wgpu::VertexFormat::Float32x4,
-                            }],
-                        },
-                        wgpu::VertexBufferLayout {
-                            array_stride: std::mem::size_of::<Vector3<f32>>()
-                                as wgpu::BufferAddress,
-                            step_mode: wgpu::VertexStepMode::Vertex,
-                            attributes: &[wgpu::VertexAttribute {
-                                offset: 0,
+                                format: wgpu::VertexFormat::Float32x3,
+                            },
+                            wgpu::VertexAttribute {
+                                offset: memoffset::offset_of!(Vertex, normal)
+                                    as wgpu::BufferAddress,
                                 shader_location: 1,
-                                format: wgpu::VertexFormat::Float32x4,
-                            }],
-                        },
-                        wgpu::VertexBufferLayout {
-                            array_stride: std::mem::size_of::<Vector3<f32>>()
-                                as wgpu::BufferAddress,
-                            step_mode: wgpu::VertexStepMode::Vertex,
-                            attributes: &[wgpu::VertexAttribute {
-                                offset: 0,
+                                format: wgpu::VertexFormat::Float32x3,
+                            },
+                            wgpu::VertexAttribute {
+                                offset: memoffset::offset_of!(Vertex, color) as wgpu::BufferAddress,
                                 shader_location: 2,
-                                format: wgpu::VertexFormat::Float32x4,
-                            }],
-                        },
-                    ],
+                                format: wgpu::VertexFormat::Float32x3,
+                            },
+                        ],
+                    }],
                 },
                 fragment: Some(wgpu::FragmentState {
                     module: &renderer.shader,
@@ -113,9 +108,7 @@ impl VoxelMesh {
         translation: Vector3<isize>,
         scale: isize,
     ) -> Self {
-        let mut positions: Vec<Vector3<f32>> = Vec::new();
-        let mut colors: Vec<Vector3<f32>> = Vec::new();
-        let mut normals: Vec<Vector3<f32>> = Vec::new();
+        let mut vertices: Vec<Vertex> = Vec::new();
 
         for [x, y, z] in field.coordinates() {
             if field[[x, y, z]] {
@@ -125,24 +118,24 @@ impl VoxelMesh {
                         translation.y as f32,
                         translation.z as f32,
                     );
-                let mut faces = vec![];
-                if vis[[x, y, z]].contains(Vis::XP) {
-                    faces.push(CUBE_FACE_X_1);
-                }
-                if vis[[x, y, z]].contains(Vis::XN) {
+                let mut faces = Vec::with_capacity(6);
+                if x == 0 || vis[[x, y, z]].contains(Vis::XN) {
                     faces.push(CUBE_FACE_X_0);
                 }
-                if vis[[x, y, z]].contains(Vis::YP) {
-                    faces.push(CUBE_FACE_Y_1);
+                if x == vis.extent() - 1 || vis[[x, y, z]].contains(Vis::XP) {
+                    faces.push(CUBE_FACE_X_1);
                 }
-                if vis[[x, y, z]].contains(Vis::YN) {
+                if y == 0 || vis[[x, y, z]].contains(Vis::YN) {
                     faces.push(CUBE_FACE_Y_0);
                 }
-                if vis[[x, y, z]].contains(Vis::ZP) {
-                    faces.push(CUBE_FACE_Z_1);
+                if y == vis.extent() - 1 || vis[[x, y, z]].contains(Vis::YP) {
+                    faces.push(CUBE_FACE_Y_1);
                 }
-                if vis[[x, y, z]].contains(Vis::ZN) {
+                if z == 0 || vis[[x, y, z]].contains(Vis::ZN) {
                     faces.push(CUBE_FACE_Z_0);
+                }
+                if z == vis.extent() - 1 || vis[[x, y, z]].contains(Vis::ZP) {
+                    faces.push(CUBE_FACE_Z_1);
                 }
                 for face in faces {
                     for [i, j, k] in face {
@@ -151,64 +144,49 @@ impl VoxelMesh {
                             scale as f32 * CUBE_VERTICES[j as usize],
                             scale as f32 * CUBE_VERTICES[k as usize],
                         ];
-                        positions.extend(vs.iter().map(|v| position + *v));
-                        normals.extend(
-                            std::iter::repeat((vs[2] - vs[0]).cross(vs[1] - vs[0]).normalize())
-                                .take(3),
-                        );
-                        colors.extend(std::iter::repeat(color[[x, y, z]]).take(3));
+                        let positions = [position + vs[0], position + vs[1], position + vs[2]];
+                        let normal = (vs[2] - vs[0]).cross(vs[1] - vs[0]).normalize();
+                        let color = color[[x, y, z]];
+                        vertices.extend([
+                            Vertex {
+                                position: positions[0],
+                                normal,
+                                color,
+                            },
+                            Vertex {
+                                position: positions[1],
+                                normal,
+                                color,
+                            },
+                            Vertex {
+                                position: positions[2],
+                                normal,
+                                color,
+                            },
+                        ]);
                     }
                 }
             }
         }
 
-        let position_buffer =
-            renderer
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: None,
-                    contents: unsafe {
-                        std::slice::from_raw_parts(
-                            positions.as_ptr() as *const u8,
-                            positions.len() * std::mem::size_of::<Vector3<f32>>(),
-                        )
-                    },
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
-
-        let normal_buffer = renderer
+        let vertex_buffer = renderer
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: None,
                 contents: unsafe {
                     std::slice::from_raw_parts(
-                        normals.as_ptr() as *const u8,
-                        normals.len() * std::mem::size_of::<Vector3<f32>>(),
+                        vertices.as_ptr() as *const u8,
+                        vertices.len() * std::mem::size_of::<Vertex>(),
                     )
                 },
                 usage: wgpu::BufferUsages::VERTEX,
             });
 
-        let color_buffer = renderer
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: None,
-                contents: unsafe {
-                    std::slice::from_raw_parts(
-                        colors.as_ptr() as *const u8,
-                        colors.len() * std::mem::size_of::<Vector3<f32>>(),
-                    )
-                },
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-
-        renderer.triangle_count += positions.len() / 3;
+        renderer.triangle_count += vertices.len() / 3;
 
         Self {
-            position_buffer,
-            normal_buffer,
-            color_buffer,
-            vertex_count: positions.len(),
+            vertex_buffer,
+            vertex_count: vertices.len(),
         }
     }
 }
@@ -235,9 +213,7 @@ impl<'a> RenderPass for VoxelPass<'a> {
     fn render<'p: 'r, 'r>(&'p self, _queue: &wgpu::Queue, render_pass: &mut wgpu::RenderPass<'r>) {
         let VoxelPass(pipeline, mesh) = self;
         render_pass.set_pipeline(&pipeline.pipeline);
-        render_pass.set_vertex_buffer(0, mesh.position_buffer.slice(..));
-        render_pass.set_vertex_buffer(1, mesh.normal_buffer.slice(..));
-        render_pass.set_vertex_buffer(2, mesh.color_buffer.slice(..));
+        render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
         render_pass.draw(0..mesh.vertex_count as u32, 0..1);
     }
 }

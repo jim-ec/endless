@@ -89,6 +89,10 @@ impl<T, const D: usize> Field<T, D> {
         index += coordinate[D - 1];
         index
     }
+
+    pub fn extent(&self) -> usize {
+        self.extent
+    }
 }
 
 impl<T: Copy, const D: usize> Field<T, D> {
