@@ -1,5 +1,5 @@
 [package]
-name = "voxels"
+name = "endless"
 version = "0.1.0"
 edition = "2021"
 
@@ -12,7 +12,6 @@ cgmath = "0.18"
 lerp = { version = "0.4.0", features = ["derive"] }
 rand = "0.8.5"
 noise = "0.8.2"
-palette = "0.7.3"
 winit = "0.28.7"
 derive_setters = "0.1.6"
 memoffset = "0.9.0"
