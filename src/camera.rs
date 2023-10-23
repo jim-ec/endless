@@ -1,4 +1,4 @@
-use std::f64::consts::TAU;
+use std::f32::consts::TAU;
 
 use cgmath::{vec3, Matrix4, Quaternion, Rotation3, SquareMatrix, Vector3, Vector4};
 
@@ -6,11 +6,10 @@ use crate::world::N;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Camera {
-    pub orbit: f64,
-    pub tilt: f64,
-    pub distance: f64,
-    pub origin: Vector3<f64>,
-    pub fovy: f64,
+    pub translation: Vector3<f32>,
+    pub yaw: f32,
+    pub pitch: f32,
+    pub fovy: f32,
 }
 
 #[repr(C)]
@@ -35,32 +34,41 @@ const Y_UP: Matrix4<f32> = Matrix4::from_cols(
 impl Camera {
     pub fn initial() -> Self {
         Self {
-            orbit: -0.3 * TAU,
-            tilt: 0.3 * 0.4 * TAU,
-            distance: N as f64,
-            origin: 0.5 * vec3(N as f64, N as f64, N as f64),
+            translation: Vector3::new(0.0, 0.0, N as f32),
+            yaw: 0.4 * TAU,
+            pitch: 0.1 * TAU,
             fovy: 60.0,
         }
     }
 
-    pub fn clamp_tilt(&mut self) {
-        self.tilt = self.tilt.clamp(-TAU / 4.0, TAU / 4.0);
+    pub fn clamp_pitch(&mut self) {
+        self.pitch = self.pitch.clamp(-TAU / 4.0, TAU / 4.0);
     }
 
-    pub fn pan(&mut self, x: f64, y: f64) {
-        let orbit = Quaternion::from_angle_z(cgmath::Rad(self.orbit));
-        let tilt = Quaternion::from_angle_y(cgmath::Rad(self.tilt));
-        let rotation = tilt * orbit;
-        self.origin += rotation.conjugate() * vec3(0.0, x, y);
+    // pub fn pan(&mut self, x: f32, y: f32) {
+    //     let orbit = Quaternion::from_angle_z(cgmath::Rad(self.orbit));
+    //     let tilt = Quaternion::from_angle_y(cgmath::Rad(self.tilt));
+    //     let rotation = tilt * orbit;
+    //     self.origin += rotation.conjugate() * vec3(0.0, x, y);
+    // }
+
+    pub fn forward(&self) -> Vector3<f32> {
+        let yaw = Quaternion::from_angle_z(cgmath::Rad(self.yaw));
+        let pitch = Quaternion::from_angle_y(cgmath::Rad(self.pitch));
+        (pitch * yaw).conjugate() * vec3(-1.0, 0.0, 0.0)
+    }
+
+    pub fn left(&self) -> Vector3<f32> {
+        let yaw = Quaternion::from_angle_z(cgmath::Rad(self.yaw));
+        let pitch = Quaternion::from_angle_y(cgmath::Rad(self.pitch));
+        (pitch * yaw).conjugate() * vec3(0.0, -1.0, 0.0)
     }
 
     pub fn uniforms(&self, aspect: f32) -> CameraUniforms {
-        let orbit = Quaternion::from_angle_z(cgmath::Rad(self.orbit));
-        let tilt = Quaternion::from_angle_y(cgmath::Rad(self.tilt));
-        let translation = Matrix4::from_translation(Vector3::new(-1.0 * self.distance, 0.0, 0.0));
+        let yaw = Quaternion::from_angle_z(cgmath::Rad(self.yaw));
+        let pitch = Quaternion::from_angle_y(cgmath::Rad(self.pitch));
 
-        let view =
-            translation * Matrix4::from(tilt * orbit) * Matrix4::from_translation(-self.origin);
+        let view = Matrix4::from(pitch * yaw) * Matrix4::from_translation(-self.translation);
 
         let pos = view.invert().unwrap() * Vector4::new(0.0, 0.0, 0.0, 1.0);
 

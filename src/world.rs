@@ -31,7 +31,7 @@ impl World {
 
         let mut chunks = HashMap::new();
 
-        let n: isize = 2;
+        let n: isize = 6;
         for x in -n..=n {
             for y in -n..=n {
                 let c = vec3(x, y, 0);
