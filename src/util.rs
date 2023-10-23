@@ -1,5 +1,5 @@
 use std::{
-    ops::{Div, MulAssign, Range, Sub, SubAssign},
+    ops::{Add, Div, Mul, Range, Sub},
     time::Instant,
 };
 
@@ -14,13 +14,16 @@ pub fn profile<R>(label: &str, f: impl FnOnce() -> R) -> R {
     r
 }
 
-pub fn rescale<T>(mut x: T, from: Range<T>, to: Range<T>) -> T
+pub fn rescale<T>(x: T, from: Range<T>, to: Range<T>) -> T
 where
-    T: Copy + SubAssign + MulAssign + Sub<T, Output = T> + Div<T, Output = T>,
+    T: Copy + Add<T, Output = T> + Sub<T, Output = T> + Mul<T, Output = T> + Div<T, Output = T>,
 {
-    x -= from.start;
-    x *= (to.end - to.start) / (from.end - from.start);
-    x
+    (x - from.start) * (to.end - to.start) / (from.end - from.start) + to.start
+}
+
+#[test]
+fn test_rescale() {
+    dbg!(rescale(0.0, -1.0..1.0, 1.0..2.0));
 }
 
 pub fn rgb(r: usize, g: usize, b: usize) -> Vector3<f32> {
