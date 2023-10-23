@@ -1,6 +1,6 @@
 use cgmath::Vector3;
 
-use crate::renderer::{self, RenderPass, Renderer, DEPTH_FORMAT};
+use crate::renderer::{RenderPass, Renderer, DEPTH_FORMAT};
 
 pub struct GizmoPass {
     gizmos: Vec<Gizmo>,
@@ -64,11 +64,7 @@ impl GizmoPass {
                     unclipped_depth: false,
                     conservative: false,
                 },
-                multisample: wgpu::MultisampleState {
-                    count: renderer::SAMPLES,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false,
-                },
+                multisample: wgpu::MultisampleState::default(),
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: DEPTH_FORMAT,
                     depth_write_enabled: true,

@@ -1,6 +1,6 @@
 use crate::{
     field::{Field, Vis},
-    renderer::{self, RenderPass, DEPTH_FORMAT, SAMPLES},
+    renderer::{self, RenderPass, DEPTH_FORMAT},
 };
 use cgmath::{vec3, InnerSpace, Vector3};
 use wgpu::util::DeviceExt;
@@ -80,11 +80,7 @@ impl VoxelPipeline {
                     unclipped_depth: false,
                     conservative: false,
                 },
-                multisample: wgpu::MultisampleState {
-                    count: SAMPLES,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false,
-                },
+                multisample: wgpu::MultisampleState::default(),
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: DEPTH_FORMAT,
                     depth_write_enabled: true,
