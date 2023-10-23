@@ -283,6 +283,49 @@ impl<const D: usize> Field<Vector3<f32>, D> {
     }
 }
 
+impl Field<f32, 2> {
+    pub fn normal(&self) -> Field<Vector3<f32>, 2> {
+        Field::new("Gradient", self.extent, |[x, y]| {
+            let dx = self[[(x + 1).min(self.extent - 1), y]] - self[[x.saturating_sub(1), y]];
+            let dy = self[[x, (y + 1).min(self.extent - 1)]] - self[[x, y.saturating_sub(1)]];
+            vec3(dx, dy, 1.0).normalize()
+        })
+    }
+}
+
+impl Field<f32, 2> {
+    pub fn blur(&self, sigma: f32) -> Self {
+        let kernel: Vec<f32> = (-3 * sigma.ceil() as isize..=3 * sigma.ceil() as isize)
+            .map(|x| {
+                let x = x as f32;
+                let a = 1.0 / (std::f32::consts::TAU * sigma * sigma).sqrt();
+                let b = -x * x / (2.0 * sigma * sigma);
+                a * b.exp()
+            })
+            .collect();
+
+        let blur_x = Field::new("Blur", self.extent, |[x, y]| {
+            let mut acc = 0.0;
+            for i in 0..kernel.len() {
+                let x = x as isize + i as isize - kernel.len() as isize / 2;
+                let x = x.clamp(0, self.extent as isize - 1);
+                acc += self[[x as usize, y]] * kernel[i];
+            }
+            acc
+        });
+
+        Field::new("Blur", self.extent, |[x, y]| {
+            let mut acc = 0.0;
+            for i in 0..kernel.len() {
+                let y = y as isize + i as isize - kernel.len() as isize / 2;
+                let y = y.clamp(0, self.extent as isize - 1);
+                acc += kernel[i] * blur_x[[x, y as usize]];
+            }
+            acc
+        })
+    }
+}
+
 impl<T: Copy + std::ops::AddAssign<T> + std::ops::DivAssign<f32>> Field<T, 3> {
     pub fn smooth(&self, mask: &Field<bool, 3>, env: &Field<Env, 3>) -> Field<T, 3> {
         self.map_with_coordinate("Smooth", |mut v, c| {

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use cgmath::{vec3, InnerSpace, Vector3};
+use cgmath::{vec3, Vector3};
 use noise::NoiseFn;
 
 use crate::{
@@ -31,7 +31,7 @@ impl World {
 
         let mut chunks = HashMap::new();
 
-        let n: isize = 4;
+        let n: isize = 2;
         for x in -n..=n {
             for y in -n..=n {
                 let c = vec3(x, y, 0);
@@ -84,45 +84,9 @@ impl Chunk {
             n * extent as f32
         });
 
-        // TODO: Implement gradient as a kernel on fields
-        let rock_gradient_map: Field<Vector3<f32>, 2> =
-            Field::new("Rock Normal Map", extent, |[x, y]| {
-                let dx = rock_height_map[[(x + 1).min(extent - 1), y]]
-                    - rock_height_map[[x.saturating_sub(1), y]];
-                let dy = rock_height_map[[x, (y + 1).min(extent - 1)]]
-                    - rock_height_map[[x, y.saturating_sub(1)]];
-                vec3(dx, dy, 1.0).normalize()
-            });
+        let rock_normal_map: Field<Vector3<f32>, 2> = rock_height_map.normal();
 
-        let sigma = 3.0;
-        let gaussian = |x: f32| {
-            let a = 1.0 / (std::f32::consts::TAU * sigma * sigma).sqrt();
-            let b = -x * x / (2.0 * sigma * sigma);
-            a * b.exp()
-        };
-        let mut kernel = vec![0.0; 6 * sigma.ceil() as usize + 1];
-        for (x, kernel_entry) in kernel.iter_mut().enumerate() {
-            *kernel_entry = gaussian(x as f32 - 3.0 * sigma);
-        }
-
-        let blur_x: Field<f32, 2> = Field::new("Blur x", extent, |[x, y]| {
-            let mut acc = 0.0;
-            for i in 0..kernel.len() {
-                let x = x as isize + i as isize - kernel.len() as isize / 2;
-                let x = x.clamp(0, extent as isize - 1);
-                acc += kernel[i] * rock_gradient_map[[x as usize, y]].z;
-            }
-            acc
-        });
-        let blur_xy: Field<f32, 2> = Field::new("Blur y", extent, |[x, y]| {
-            let mut acc = 0.0;
-            for i in 0..kernel.len() {
-                let y = y as isize + i as isize - kernel.len() as isize / 2;
-                let y = y.clamp(0, extent as isize - 1);
-                acc += kernel[i] * blur_x[[x, y as usize]];
-            }
-            acc
-        });
+        let blur_xy = rock_normal_map.map("", |v| v.z).blur(3.0);
 
         let sediments: Field<Sediment, 3> = Field::new("Sediments", extent, |[x, y, z]| {
             let flatteness = blur_xy[[x, y]];
