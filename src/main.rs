@@ -128,9 +128,9 @@ async fn run() {
                 camera_target.translation += FRAME_TIME * speed * translation.normalize_to(1.0);
             }
 
-            camera.translation = camera.translation.lerp(camera_target.translation, 0.4);
-            camera.yaw = camera.yaw.lerp(camera_target.yaw, 0.6);
-            camera.pitch = camera.pitch.lerp(camera_target.pitch, 0.6);
+            camera.translation.lerp_to(camera_target.translation, 0.4);
+            camera.yaw.lerp_to(camera_target.yaw, 0.6);
+            camera.pitch.lerp_to(camera_target.pitch, 0.6);
 
             let mut passes: Vec<&dyn RenderPass> = vec![];
             passes.push(&world.gizmo_pass);
