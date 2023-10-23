@@ -3,8 +3,6 @@ use std::fmt::Debug;
 use bitflags::bitflags;
 use cgmath::{vec3, InnerSpace, Vector3, Zero};
 
-use crate::util::profile;
-
 #[derive(Clone)]
 pub struct Field<T, const D: usize> {
     voxels: Vec<T>,
@@ -66,13 +64,11 @@ pub fn coordinates<const D: usize>(extent: usize) -> impl Iterator<Item = [usize
 }
 
 impl<T, const D: usize> Field<T, D> {
-    pub fn new(label: &str, extent: usize, mut f: impl FnMut([usize; D]) -> T) -> Self {
+    pub fn new(extent: usize, mut f: impl FnMut([usize; D]) -> T) -> Self {
         let mut voxels = Vec::with_capacity(extent.pow(3));
-        profile(label, || {
-            for co in coordinates(extent) {
-                voxels.push(f(co));
-            }
-        });
+        for co in coordinates(extent) {
+            voxels.push(f(co));
+        }
         Field { voxels, extent }
     }
 
@@ -96,16 +92,12 @@ impl<T, const D: usize> Field<T, D> {
 }
 
 impl<T: Copy, const D: usize> Field<T, D> {
-    pub fn map<R>(&self, label: &str, f: impl Fn(T) -> R) -> Field<R, D> {
-        Field::new(label, self.extent, |co| f(self[co]))
+    pub fn map<R>(&self, f: impl Fn(T) -> R) -> Field<R, D> {
+        Field::new(self.extent, |co| f(self[co]))
     }
 
-    pub fn map_with_coordinate<R>(
-        &self,
-        label: &str,
-        mut f: impl FnMut(T, [usize; D]) -> R,
-    ) -> Field<R, D> {
-        Field::new(label, self.extent, |co| f(self[co], co))
+    pub fn map_with_coordinate<R>(&self, mut f: impl FnMut(T, [usize; D]) -> R) -> Field<R, D> {
+        Field::new(self.extent, |co| f(self[co], co))
     }
 }
 
@@ -157,7 +149,7 @@ bitflags! {
 impl Field<bool, 3> {
     /// Compute the direct neighourhood of each voxel.
     pub fn environment(&self) -> Field<Env, 3> {
-        self.map_with_coordinate("Environment", |set, [x, y, z]| {
+        self.map_with_coordinate(|set, [x, y, z]| {
             let mut env = Env::empty();
 
             let xp = x < self.extent - 1;
@@ -199,7 +191,7 @@ impl Field<bool, 3> {
     }
 
     pub fn shell(&self, env: &Field<Env, 3>) -> Field<bool, 3> {
-        self.map_with_coordinate("Shell", |set, c| set && !env[c].is_all())
+        self.map_with_coordinate(|set, c| set && !env[c].is_all())
     }
 }
 
@@ -207,7 +199,7 @@ impl Field<Env, 3> {
     /// Compute visible faces of each voxel i.e. faces that are not internal.
     /// Faces at the field boundary are not considered to be visible.
     pub fn visibility(&self) -> Field<Vis, 3> {
-        self.map_with_coordinate("Visibility", |env, [x, y, z]| {
+        self.map_with_coordinate(|env, [x, y, z]| {
             let mut vis = Vis::empty();
 
             let xp = x < self.extent - 1;
@@ -230,7 +222,7 @@ impl Field<Env, 3> {
 
 impl Field<Vis, 3> {
     pub fn normals(&self) -> Field<Vector3<f32>, 3> {
-        self.map("Normals", |vis| {
+        self.map(|vis| {
             let mut n = Vector3::zero();
 
             if vis.contains(Vis::XP) {
@@ -261,7 +253,7 @@ impl Field<Vis, 3> {
     }
 
     pub fn coverage(&self) -> Field<f32, 3> {
-        self.map("Coverage", |v| {
+        self.map(|v| {
             let count = v.bits().count_ones();
             count as f32 / 8.0
         })
@@ -270,7 +262,7 @@ impl Field<Vis, 3> {
 
 impl<const D: usize> Field<f32, D> {
     pub fn grayscale(&self) -> Field<Vector3<f32>, D> {
-        self.map("Grayscale", |f| {
+        self.map(|f| {
             let f = f.powf(2.2);
             vec3(f, f, f)
         })
@@ -279,13 +271,13 @@ impl<const D: usize> Field<f32, D> {
 
 impl<const D: usize> Field<Vector3<f32>, D> {
     pub fn steepness(&self) -> Field<f32, D> {
-        self.map("Steepness", |n| 1.0 - n.dot(vec3(0.0, 0.0, 1.0)))
+        self.map(|n| 1.0 - n.dot(vec3(0.0, 0.0, 1.0)))
     }
 }
 
 impl Field<f32, 2> {
     pub fn normal(&self) -> Field<Vector3<f32>, 2> {
-        Field::new("Gradient", self.extent, |[x, y]| {
+        Field::new(self.extent, |[x, y]| {
             let dx = self[[(x + 1).min(self.extent - 1), y]] - self[[x.saturating_sub(1), y]];
             let dy = self[[x, (y + 1).min(self.extent - 1)]] - self[[x, y.saturating_sub(1)]];
             vec3(dx, dy, 1.0).normalize()
@@ -304,7 +296,7 @@ impl Field<f32, 2> {
             })
             .collect();
 
-        let blur_x = Field::new("Blur", self.extent, |[x, y]| {
+        let blur_x = Field::new(self.extent, |[x, y]| {
             let mut acc = 0.0;
             for i in 0..kernel.len() {
                 let x = x as isize + i as isize - kernel.len() as isize / 2;
@@ -314,7 +306,7 @@ impl Field<f32, 2> {
             acc
         });
 
-        Field::new("Blur", self.extent, |[x, y]| {
+        Field::new(self.extent, |[x, y]| {
             let mut acc = 0.0;
             for i in 0..kernel.len() {
                 let y = y as isize + i as isize - kernel.len() as isize / 2;
@@ -328,7 +320,7 @@ impl Field<f32, 2> {
 
 impl<T: Copy + std::ops::AddAssign<T> + std::ops::DivAssign<f32>> Field<T, 3> {
     pub fn smooth(&self, mask: &Field<bool, 3>, env: &Field<Env, 3>) -> Field<T, 3> {
-        self.map_with_coordinate("Smooth", |mut v, c| {
+        self.map_with_coordinate(|mut v, c| {
             let mut count: usize = 1;
             if mask[c] {
                 let env = env[c];

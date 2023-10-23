@@ -7,7 +7,7 @@ use crate::{
     field::Field,
     gizmo_pass::GizmoPass,
     renderer::Renderer,
-    util::{rescale, rgb},
+    util::{profile, rescale, rgb},
     voxel_pass::{VoxelMesh, VoxelPipeline},
 };
 
@@ -35,11 +35,13 @@ impl World {
         for x in -n..=n {
             for y in -n..=n {
                 let c = vec3(x, y, 0);
-                let fidelity = x.unsigned_abs() + y.unsigned_abs();
-                let fidelity = fidelity >> 2;
+                let lod = x.unsigned_abs() + y.unsigned_abs();
+                let lod = lod >> 2;
 
-                if N >> fidelity > 0 {
-                    chunks.insert(c, Chunk::new(renderer, c, fidelity));
+                if (N >> lod) > 0 {
+                    profile(&format!("Chunk ({x:+},{y:+},{:+}) @{lod}", 0), || {
+                        chunks.insert(c, Chunk::new(renderer, c, lod));
+                    });
                 }
             }
         }
@@ -53,14 +55,14 @@ impl World {
 }
 
 impl Chunk {
-    pub fn new(renderer: &mut Renderer, translation: Vector3<isize>, fidelity: usize) -> Self {
+    pub fn new(renderer: &mut Renderer, translation: Vector3<isize>, lod: usize) -> Self {
         use noise::{Fbm, Perlin, Turbulence};
         let mut noise = Fbm::<Perlin>::new(0);
         noise.frequency = 0.01;
         let noise = Turbulence::<_, Perlin>::new(noise);
 
-        let extent = N >> fidelity;
-        let scale = 1 << fidelity;
+        let extent = N >> lod;
+        let scale = 1 << lod;
 
         let t = N as f64
             * vec3(
@@ -76,7 +78,7 @@ impl Chunk {
             Air,
         }
 
-        let rock_height_map: Field<f32, 2> = Field::new("Rock Height Map", extent, |[x, y]| {
+        let rock_height_map: Field<f32, 2> = Field::new(extent, |[x, y]| {
             let mut n =
                 noise.get([scale as f64 * x as f64 + t.x, scale as f64 * y as f64 + t.y]) as f32;
             n = rescale(n, -1.0..1.0, 0.1..0.9);
@@ -86,9 +88,9 @@ impl Chunk {
 
         let rock_normal_map: Field<Vector3<f32>, 2> = rock_height_map.normal();
 
-        let blur_xy = rock_normal_map.map("", |v| v.z).blur(3.0);
+        let blur_xy = rock_normal_map.map(|v| v.z).blur(3.0);
 
-        let sediments: Field<Sediment, 3> = Field::new("Sediments", extent, |[x, y, z]| {
+        let sediments: Field<Sediment, 3> = Field::new(extent, |[x, y, z]| {
             let flatteness = blur_xy[[x, y]];
 
             let rock = rock_height_map[[x, y]];
@@ -108,11 +110,10 @@ impl Chunk {
             }
         });
 
-        let field: Field<bool, 3> = Field::new("Field", extent, |[x, y, z]| {
-            sediments[[x, y, z]] != Sediment::Air
-        });
+        let field: Field<bool, 3> =
+            Field::new(extent, |[x, y, z]| sediments[[x, y, z]] != Sediment::Air);
 
-        let color = sediments.map("Color", |s| match s {
+        let color = sediments.map(|s| match s {
             Sediment::Rock => rgb(50, 40, 50),
             Sediment::Grass => rgb(120, 135, 5),
             Sediment::Air => rgb(0, 0, 0),
