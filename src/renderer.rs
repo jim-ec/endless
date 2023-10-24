@@ -250,7 +250,7 @@ impl Renderer {
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
             pass.render(&self.queue, &mut render_pass);
-            
+
             drop(render_pass);
             self.queue.submit(Some(command_encoder.finish()));
         }
