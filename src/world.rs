@@ -34,7 +34,7 @@ impl World {
         let n: isize = 1;
         for x in -n..=n {
             for y in -n..=n {
-                for z in 0..=1 {
+                for z in 0..=0 {
                     let c = vec3(x, y, z);
                     let lod = x.unsigned_abs() + y.unsigned_abs();
                     // let lod = lod >> 2;
@@ -130,8 +130,8 @@ impl Chunk {
                 &field.shell(&env),
                 &env.visibility(),
                 &color,
-                N as isize * translation,
-                scale,
+                N as f32 * translation.cast().unwrap(),
+                scale as f32,
             ),
             mask: field,
             color,

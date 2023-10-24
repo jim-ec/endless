@@ -2,7 +2,7 @@ use crate::{
     field::{Field, Vis},
     renderer::{self, RenderPass, DEPTH_FORMAT},
 };
-use cgmath::{vec3, InnerSpace, Vector3};
+use cgmath::{vec3, InnerSpace, Matrix4, Quaternion, Vector3};
 use wgpu::util::DeviceExt;
 
 pub struct VoxelPipeline {
@@ -11,6 +11,9 @@ pub struct VoxelPipeline {
 
 #[derive(Debug)]
 pub struct VoxelMesh {
+    rotation: Quaternion<f32>,
+    translation: Vector3<f32>,
+    scale: f32,
     buffer: wgpu::Buffer,
     count: usize,
 }
@@ -101,19 +104,14 @@ impl VoxelMesh {
         mask: &Field<bool, 3>,
         vis: &Field<Vis, 3>,
         color: &Field<Vector3<f32>, 3>,
-        translation: Vector3<isize>,
-        scale: isize,
+        translation: Vector3<f32>,
+        scale: f32,
     ) -> Self {
         let mut vertices: Vec<Vertex> = Vec::new();
 
         for [x, y, z] in mask.coordinates() {
             if mask[[x, y, z]] {
-                let position = scale as f32 * vec3(x as f32, y as f32, z as f32)
-                    + vec3(
-                        translation.x as f32,
-                        translation.y as f32,
-                        translation.z as f32,
-                    );
+                let position = vec3(x as f32, y as f32, z as f32);
                 let mut faces = Vec::with_capacity(6);
                 if x == 0 || vis[[x, y, z]].contains(Vis::XN) {
                     faces.push(CUBE_FACE_X_0);
@@ -136,9 +134,9 @@ impl VoxelMesh {
                 for face in faces {
                     for [i, j, k] in face {
                         let vs = [
-                            scale as f32 * CUBE_VERTICES[i as usize],
-                            scale as f32 * CUBE_VERTICES[j as usize],
-                            scale as f32 * CUBE_VERTICES[k as usize],
+                            CUBE_VERTICES[i as usize],
+                            CUBE_VERTICES[j as usize],
+                            CUBE_VERTICES[k as usize],
                         ];
                         let positions = [position + vs[0], position + vs[1], position + vs[2]];
                         let normal = (vs[2] - vs[0]).cross(vs[1] - vs[0]).normalize();
@@ -181,6 +179,9 @@ impl VoxelMesh {
         renderer.triangle_count += vertices.len() / 3;
 
         Self {
+            rotation: Quaternion::new(1.0, 0.0, 0.0, 0.0),
+            translation,
+            scale,
             buffer: vertex_buffer,
             count: vertices.len(),
         }
@@ -211,5 +212,12 @@ impl<'a> RenderPass for VoxelPass<'a> {
         render_pass.set_pipeline(&pipeline.pipeline);
         render_pass.set_vertex_buffer(0, mesh.buffer.slice(..));
         render_pass.draw(0..mesh.count as u32, 0..1);
+    }
+
+    fn model_matrix(&self) -> Matrix4<f32> {
+        let VoxelPass(_, mesh) = self;
+        Matrix4::from_translation(mesh.translation)
+            * Matrix4::from(mesh.rotation)
+            * Matrix4::from_scale(mesh.scale)
     }
 }

@@ -1,4 +1,4 @@
-use cgmath::Vector3;
+use cgmath::{Matrix4, SquareMatrix, Vector3};
 
 use crate::renderer::{RenderPass, Renderer, DEPTH_FORMAT};
 
@@ -135,5 +135,9 @@ impl RenderPass for GizmoPass {
             0,
             bytemuck::cast_slice(self.gizmos.as_slice()),
         );
+    }
+
+    fn model_matrix(&self) -> Matrix4<f32> {
+        Matrix4::identity()
     }
 }

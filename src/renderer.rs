@@ -1,4 +1,4 @@
-use cgmath::{Matrix4, Vector3};
+use cgmath::{Matrix4, SquareMatrix, Vector3};
 use winit::window::Window;
 
 use crate::{camera, util};
@@ -22,6 +22,7 @@ pub struct Renderer {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct Uniforms {
+    pub model: Matrix4<f32>,
     pub view: Matrix4<f32>,
     pub proj: Matrix4<f32>,
     pub camera_translation: Vector3<f32>,
@@ -31,6 +32,7 @@ unsafe impl bytemuck::Pod for Uniforms {}
 unsafe impl bytemuck::Zeroable for Uniforms {}
 
 pub trait RenderPass {
+    fn model_matrix(&self) -> Matrix4<f32>;
     fn render<'p: 'r, 'r>(&'p self, queue: &wgpu::Queue, render_pass: &mut wgpu::RenderPass<'r>);
 }
 
@@ -180,41 +182,48 @@ impl Renderer {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let uniforms = Uniforms {
+        let mut uniforms = Uniforms {
+            model: Matrix4::identity(),
             view: camera.view_matrix(),
             proj: camera.proj_matrix(self.size.width as f32 / self.size.height as f32),
             camera_translation: camera.translation,
         };
 
-        let mut command_encoder = self.device.create_command_encoder(&Default::default());
-
         let depth_texture_view = self.depth_texture.create_view(&Default::default());
-        command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: None,
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.01,
-                        g: 0.01,
-                        b: 0.01,
-                        a: 1.0,
+
+        {
+            let mut command_encoder = self.device.create_command_encoder(&Default::default());
+            command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: None,
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.01,
+                            g: 0.01,
+                            b: 0.01,
+                            a: 1.0,
+                        }),
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &depth_texture_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: true,
                     }),
-                    store: true,
-                },
-            })],
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: &depth_texture_view,
-                depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(1.0),
-                    store: true,
+                    stencil_ops: None,
                 }),
-                stencil_ops: None,
-            }),
-        });
+            });
+            self.queue.submit(Some(command_encoder.finish()));
+        }
 
         for pass in passes {
+            let mut command_encoder = self.device.create_command_encoder(&Default::default());
+
+            uniforms.model = pass.model_matrix();
             self.queue
                 .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
 
@@ -241,9 +250,10 @@ impl Renderer {
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
             pass.render(&self.queue, &mut render_pass);
+            
+            drop(render_pass);
+            self.queue.submit(Some(command_encoder.finish()));
         }
-
-        self.queue.submit(Some(command_encoder.finish()));
 
         surface_texture.present();
 

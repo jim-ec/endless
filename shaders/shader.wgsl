@@ -1,4 +1,5 @@
 struct Uniforms {
+    model: mat4x4<f32>,
     view: mat4x4<f32>,
     proj: mat4x4<f32>,
     camera_translation: vec3<f32>,
@@ -23,9 +24,8 @@ struct Out {
 fn voxel_vertex(in: In) -> Out {
     var out: Out;
 
-    let position = vec4(in.position, 1.0);
-    out.clip_position = uniforms.proj * uniforms.view * position;
-    out.position = position.xyz / position.w;
+    out.clip_position = uniforms.proj * uniforms.view * uniforms.model * hom(in.position);
+    out.position = dehom(uniforms.model * hom(in.position));
 
     out.color = clamp(in.color, vec3(0.0), vec3(1.0));
 
@@ -48,10 +48,18 @@ fn voxel_fragment(out: Out) -> @location(0) vec4<f32> {
 
 @vertex
 fn gizmo_vertex(@location(0) position: vec3<f32>) -> @builtin(position) vec4<f32> {
-    return uniforms.proj * uniforms.view * vec4(position, 1.0);
+    return uniforms.proj * uniforms.view * uniforms.model * hom(position);
 }
 
 @fragment
 fn gizmo_fragment() -> @location(0) vec4<f32> {
     return vec4(1.0, 1.0, 0.0, 1.0);
+}
+
+fn hom(v: vec3<f32>) -> vec4<f32> {
+    return vec4(v, 1.0);
+}
+
+fn dehom(v: vec4<f32>) -> vec3<f32> {
+    return v.xyz / v.w;
 }
