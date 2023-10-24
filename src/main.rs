@@ -51,6 +51,24 @@ async fn run() {
     let mut shift_down = false;
     let mut alt_down = false;
 
+    let mut egui_renderer = egui_wgpu::Renderer::new(
+        &renderer.device,
+        renderer.config.format,
+        Some(renderer::DEPTH_FORMAT),
+        1,
+    );
+
+    let ctx = egui::Context::default();
+
+    let input = egui::RawInput {
+        screen_rect: Some(egui::Rect::from_min_size(
+            egui::Pos2::ZERO,
+            egui::vec2(renderer.size.width as f32, renderer.size.height as f32),
+        )),
+        pixels_per_point: Some(2.0),
+        ..Default::default()
+    };
+
     event_loop.run(move |event, _, control_flow| match event {
         Event::NewEvents(winit::event::StartCause::Init) => {
             window.set_visible(true);
@@ -94,7 +112,8 @@ async fn run() {
                 delta: MouseScrollDelta::PixelDelta(delta),
                 ..
             } => {
-                camera_target.yaw += camera_target.fovy * camera.up().z.signum() * 0.00008 * delta.x as f32;
+                camera_target.yaw +=
+                    camera_target.fovy * camera.up().z.signum() * 0.00008 * delta.x as f32;
                 camera_target.pitch += camera_target.fovy * 0.00008 * delta.y as f32;
             }
 
@@ -148,7 +167,30 @@ async fn run() {
             }
             passes.extend(voxel_passes.iter().map(|p| p as &dyn RenderPass));
 
-            match renderer.render(&camera, &passes) {
+            let output: egui::FullOutput = ctx.run(input.clone(), |ctx| {
+                egui::Window::new("")
+                    .title_bar(false)
+                    .resizable(false)
+                    .show(ctx, |ui| {
+                        #[cfg(debug_assertions)]
+                        ui.label(egui::RichText::new("Debug Build").strong());
+                        #[cfg(not(debug_assertions))]
+                        ui.label(egui::RichText::new("Release Build").strong());
+
+                        ui.label(format!("FoV: {:.2}°", camera_target.fovy));
+                    });
+            });
+
+            for (id, delta) in &output.textures_delta.set {
+                egui_renderer.update_texture(&renderer.device, &renderer.queue, *id, delta);
+            }
+            for id in &output.textures_delta.free {
+                egui_renderer.free_texture(id);
+            }
+
+            let tris = ctx.tessellate(output.shapes);
+
+            match renderer.render(&camera, &passes, &mut egui_renderer, &tris) {
                 Ok(_) => {}
                 Err(wgpu::SurfaceError::Lost) => renderer.resize(renderer.size),
                 Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,

@@ -31,7 +31,7 @@ impl World {
 
         let mut chunks = HashMap::new();
 
-        let n: isize = 1;
+        let n: isize = 0;
         for x in -n..=n {
             for y in -n..=n {
                 for z in 0..=0 {

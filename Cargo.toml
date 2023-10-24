@@ -17,6 +17,8 @@ derive_setters = "0.1.6"
 memoffset = "0.9.0"
 bitflags = "2.4.1"
 pollster = "0.3.0"
+egui = "0.23.0"
+egui-wgpu = "0.23.0"
 
 [profile.dev]
 debug = true

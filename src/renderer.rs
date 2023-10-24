@@ -176,6 +176,8 @@ impl Renderer {
         &self,
         camera: &camera::Camera,
         passes: &[&dyn RenderPass],
+        egui_renderer: &mut egui_wgpu::Renderer,
+        egui_mesh: &[egui::ClippedPrimitive],
     ) -> Result<(), wgpu::SurfaceError> {
         let surface_texture = self.surface.get_current_texture()?;
         let view = surface_texture
@@ -251,6 +253,52 @@ impl Renderer {
 
             pass.render(&self.queue, &mut render_pass);
 
+            drop(render_pass);
+            self.queue.submit(Some(command_encoder.finish()));
+        }
+
+        {
+            let mut command_encoder = self.device.create_command_encoder(&Default::default());
+
+            egui_renderer.update_buffers(
+                &self.device,
+                &self.queue,
+                &mut command_encoder,
+                egui_mesh,
+                &egui_wgpu::renderer::ScreenDescriptor {
+                    size_in_pixels: [self.size.width, self.size.height],
+                    pixels_per_point: 2.0,
+                },
+            );
+
+            let mut render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &depth_texture_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: true,
+                    }),
+                    stencil_ops: None,
+                }),
+                ..Default::default()
+            });
+
+            egui_renderer.render(
+                &mut render_pass,
+                egui_mesh,
+                &egui_wgpu::renderer::ScreenDescriptor {
+                    size_in_pixels: [self.size.width, self.size.height],
+                    pixels_per_point: 2.0,
+                },
+            );
             drop(render_pass);
             self.queue.submit(Some(command_encoder.finish()));
         }
