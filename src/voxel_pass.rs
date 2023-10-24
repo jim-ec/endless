@@ -11,8 +11,8 @@ pub struct VoxelPipeline {
 
 #[derive(Debug)]
 pub struct VoxelMesh {
-    vertex_buffer: wgpu::Buffer,
-    vertex_count: usize,
+    buffer: wgpu::Buffer,
+    count: usize,
 }
 
 struct Vertex {
@@ -98,7 +98,7 @@ impl VoxelPipeline {
 impl VoxelMesh {
     pub fn new(
         renderer: &mut renderer::Renderer,
-        field: &Field<bool, 3>,
+        mask: &Field<bool, 3>,
         vis: &Field<Vis, 3>,
         color: &Field<Vector3<f32>, 3>,
         translation: Vector3<isize>,
@@ -106,8 +106,8 @@ impl VoxelMesh {
     ) -> Self {
         let mut vertices: Vec<Vertex> = Vec::new();
 
-        for [x, y, z] in field.coordinates() {
-            if field[[x, y, z]] {
+        for [x, y, z] in mask.coordinates() {
+            if mask[[x, y, z]] {
                 let position = scale as f32 * vec3(x as f32, y as f32, z as f32)
                     + vec3(
                         translation.x as f32,
@@ -181,8 +181,8 @@ impl VoxelMesh {
         renderer.triangle_count += vertices.len() / 3;
 
         Self {
-            vertex_buffer,
-            vertex_count: vertices.len(),
+            buffer: vertex_buffer,
+            count: vertices.len(),
         }
     }
 }
@@ -209,7 +209,7 @@ impl<'a> RenderPass for VoxelPass<'a> {
     fn render<'p: 'r, 'r>(&'p self, _queue: &wgpu::Queue, render_pass: &mut wgpu::RenderPass<'r>) {
         let VoxelPass(pipeline, mesh) = self;
         render_pass.set_pipeline(&pipeline.pipeline);
-        render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-        render_pass.draw(0..mesh.vertex_count as u32, 0..1);
+        render_pass.set_vertex_buffer(0, mesh.buffer.slice(..));
+        render_pass.draw(0..mesh.count as u32, 0..1);
     }
 }

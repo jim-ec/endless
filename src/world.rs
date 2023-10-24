@@ -20,9 +20,9 @@ pub struct World {
 }
 
 pub struct Chunk {
-    pub field: Field<bool, 3>,
+    pub mask: Field<bool, 3>,
     pub color: Field<Vector3<f32>, 3>,
-    pub voxel_mesh: VoxelMesh,
+    pub mesh: VoxelMesh,
 }
 
 impl World {
@@ -31,13 +31,13 @@ impl World {
 
         let mut chunks = HashMap::new();
 
-        let n: isize = 2;
+        let n: isize = 1;
         for x in -n..=n {
             for y in -n..=n {
                 for z in 0..=1 {
                     let c = vec3(x, y, z);
                     let lod = x.unsigned_abs() + y.unsigned_abs();
-                    let lod = lod >> 2;
+                    // let lod = lod >> 2;
 
                     if (N >> lod) > 0 {
                         profile(&format!("Chunk ({x:+},{y:+},{:+}) @{lod}", 0), || {
@@ -125,7 +125,7 @@ impl Chunk {
         let env = field.environment();
 
         Self {
-            voxel_mesh: VoxelMesh::new(
+            mesh: VoxelMesh::new(
                 renderer,
                 &field.shell(&env),
                 &env.visibility(),
@@ -133,7 +133,7 @@ impl Chunk {
                 N as isize * translation,
                 scale,
             ),
-            field,
+            mask: field,
             color,
         }
     }

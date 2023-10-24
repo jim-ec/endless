@@ -138,7 +138,7 @@ async fn run() {
             let mut voxel_passes = vec![];
             passes.push(&world.gizmo_pass);
             for chunk in world.chunks.values() {
-                voxel_passes.push(VoxelPass(&world.voxel_pipeline, &chunk.voxel_mesh));
+                voxel_passes.push(VoxelPass(&world.voxel_pipeline, &chunk.mesh));
             }
             passes.extend(voxel_passes.iter().map(|p| p as &dyn RenderPass));
 
