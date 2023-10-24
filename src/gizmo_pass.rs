@@ -29,7 +29,7 @@ impl GizmoPass {
                 label: None,
                 layout: Some(&renderer.device.create_pipeline_layout(
                     &wgpu::PipelineLayoutDescriptor {
-                        bind_group_layouts: &[&renderer.bind_group_layout],
+                        bind_group_layouts: &[&renderer.uniform_bind_group_layout],
                         ..Default::default()
                     },
                 )),

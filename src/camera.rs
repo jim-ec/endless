@@ -1,6 +1,6 @@
 use std::f32::consts::TAU;
 
-use cgmath::{vec3, Matrix4, Quaternion, Rotation3, SquareMatrix, Vector3, Vector4};
+use cgmath::{vec3, Matrix4, Quaternion, Rotation3, Vector3, Vector4};
 
 use crate::world::N;
 
@@ -11,17 +11,6 @@ pub struct Camera {
     pub pitch: f32,
     pub fovy: f32,
 }
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug)]
-pub struct CameraUniforms {
-    pub view: Matrix4<f32>,
-    pub proj: Matrix4<f32>,
-    pub pos: Vector4<f32>,
-}
-
-unsafe impl bytemuck::Pod for CameraUniforms {}
-unsafe impl bytemuck::Zeroable for CameraUniforms {}
 
 /// Converts from a Z-up right-handed coordinate system into a Y-up left-handed coordinate system.
 const Y_UP: Matrix4<f32> = Matrix4::from_cols(
@@ -64,21 +53,14 @@ impl Camera {
         (pitch * yaw).conjugate() * vec3(0.0, -1.0, 0.0)
     }
 
-    pub fn uniforms(&self, aspect: f32) -> CameraUniforms {
+    pub fn view_matrix(&self) -> Matrix4<f32> {
         let yaw = Quaternion::from_angle_z(cgmath::Rad(self.yaw));
         let pitch = Quaternion::from_angle_y(cgmath::Rad(self.pitch));
+        Matrix4::from(pitch * yaw) * Matrix4::from_translation(-self.translation)
+    }
 
-        let view = Matrix4::from(pitch * yaw) * Matrix4::from_translation(-self.translation);
-
-        let pos = view.invert().unwrap() * Vector4::new(0.0, 0.0, 0.0, 1.0);
-
-        let proj = perspective_matrix(f32::to_radians(60.0), aspect, 0.1, None) * Y_UP;
-
-        CameraUniforms {
-            view: view.cast().unwrap(),
-            proj: proj.cast().unwrap(),
-            pos: pos.cast().unwrap(),
-        }
+    pub fn proj_matrix(&self, aspect: f32) -> Matrix4<f32> {
+        perspective_matrix(f32::to_radians(self.fovy), aspect, 0.1, None) * Y_UP
     }
 }
 

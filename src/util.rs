@@ -29,3 +29,7 @@ fn test_rescale() {
 pub fn rgb(r: usize, g: usize, b: usize) -> Vector3<f32> {
     vec3(r, g, b).map(|x| x as f32 / 255.0)
 }
+
+pub fn align(x: usize, align: usize) -> usize {
+    (x + align - 1) & !(align - 1)
+}

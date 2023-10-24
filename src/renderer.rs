@@ -1,6 +1,7 @@
+use cgmath::{Matrix4, Vector3};
 use winit::window::Window;
 
-use crate::camera;
+use crate::{camera, util};
 
 pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth24Plus;
 
@@ -10,13 +11,24 @@ pub struct Renderer {
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
-    pub bind_group: wgpu::BindGroup,
-    pub bind_group_layout: wgpu::BindGroupLayout,
-    buffer: wgpu::Buffer,
+    pub uniform_bind_group: wgpu::BindGroup,
+    pub uniform_bind_group_layout: wgpu::BindGroupLayout,
+    uniform_buffer: wgpu::Buffer,
     pub depth_texture: wgpu::Texture,
     pub shader: wgpu::ShaderModule,
     pub triangle_count: usize,
 }
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct Uniforms {
+    pub view: Matrix4<f32>,
+    pub proj: Matrix4<f32>,
+    pub camera_translation: Vector3<f32>,
+}
+
+unsafe impl bytemuck::Pod for Uniforms {}
+unsafe impl bytemuck::Zeroable for Uniforms {}
 
 pub trait RenderPass {
     fn render<'p: 'r, 'r>(&'p self, queue: &wgpu::Queue, render_pass: &mut wgpu::RenderPass<'r>);
@@ -61,7 +73,7 @@ impl Renderer {
 
         let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            size: std::mem::size_of::<camera::CameraUniforms>() as wgpu::BufferAddress,
+            size: util::align(std::mem::size_of::<Uniforms>(), 16) as wgpu::BufferAddress,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -75,10 +87,7 @@ impl Renderer {
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(std::mem::size_of::<
-                            camera::CameraUniforms,
-                        >()
-                            as wgpu::BufferAddress),
+                        min_binding_size: None,
                     },
                     count: None,
                 }],
@@ -125,10 +134,10 @@ impl Renderer {
             queue,
             config,
             size,
-            bind_group: uniform_bind_group,
-            bind_group_layout: uniform_bind_group_layout,
+            uniform_bind_group,
+            uniform_bind_group_layout,
             depth_texture,
-            buffer: uniform_buffer,
+            uniform_buffer,
             shader,
             triangle_count: 0,
         }
@@ -171,13 +180,11 @@ impl Renderer {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        self.queue.write_buffer(
-            &self.buffer,
-            0,
-            bytemuck::cast_slice(&[
-                camera.uniforms(self.size.width as f32 / self.size.height as f32)
-            ]),
-        );
+        let uniforms = Uniforms {
+            view: camera.view_matrix(),
+            proj: camera.proj_matrix(self.size.width as f32 / self.size.height as f32),
+            camera_translation: camera.translation,
+        };
 
         let mut command_encoder = self.device.create_command_encoder(&Default::default());
 
@@ -208,6 +215,9 @@ impl Renderer {
         });
 
         for pass in passes {
+            self.queue
+                .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
+
             let mut render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
@@ -228,7 +238,7 @@ impl Renderer {
                 ..Default::default()
             });
 
-            render_pass.set_bind_group(0, &self.bind_group, &[]);
+            render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
             pass.render(&self.queue, &mut render_pass);
         }
