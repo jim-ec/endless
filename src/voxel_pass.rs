@@ -1,6 +1,7 @@
 use crate::{
     field::{Field, Vis},
     renderer::{self, RenderPass, DEPTH_FORMAT},
+    symmetry::Symmetry,
 };
 use cgmath::{vec3, InnerSpace, Matrix4, Quaternion, Vector3};
 use wgpu::util::DeviceExt;
@@ -11,9 +12,7 @@ pub struct VoxelPipeline {
 
 #[derive(Debug)]
 pub struct VoxelMesh {
-    rotation: Quaternion<f32>,
-    translation: Vector3<f32>,
-    scale: f32,
+    symmetry: Symmetry,
     buffer: wgpu::Buffer,
     count: usize,
 }
@@ -163,7 +162,7 @@ impl VoxelMesh {
             }
         }
 
-        let vertex_buffer = renderer
+        let buffer = renderer
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: None,
@@ -179,10 +178,12 @@ impl VoxelMesh {
         renderer.triangle_count += vertices.len() / 3;
 
         Self {
-            rotation: Quaternion::new(1.0, 0.0, 0.0, 0.0),
-            translation,
-            scale,
-            buffer: vertex_buffer,
+            symmetry: Symmetry {
+                rotation: Quaternion::new(1.0, 0.0, 0.0, 0.0),
+                translation,
+                scale,
+            },
+            buffer,
             count: vertices.len(),
         }
     }
@@ -216,8 +217,6 @@ impl<'a> RenderPass for VoxelPass<'a> {
 
     fn model_matrix(&self) -> Matrix4<f32> {
         let VoxelPass(_, mesh) = self;
-        Matrix4::from_translation(mesh.translation)
-            * Matrix4::from(mesh.rotation)
-            * Matrix4::from_scale(mesh.scale)
+        mesh.symmetry.matrix()
     }
 }
