@@ -98,6 +98,20 @@ async fn run() {
                 camera_target.pitch += 0.005 * delta.y as f32;
             }
 
+            WindowEvent::TouchpadRotate { delta, .. } => {
+                camera_target.roll += 0.025 * delta;
+            }
+
+            WindowEvent::TouchpadMagnify { delta, .. } => {
+                camera_target.fovy += 25.0 * -delta as f32;
+            }
+
+            WindowEvent::SmartMagnify { .. } => {
+                let initial = camera::Camera::initial();
+                camera_target.fovy = initial.fovy;
+                camera_target.roll = initial.roll;
+            }
+
             _ => {}
         },
 
@@ -128,9 +142,7 @@ async fn run() {
                 camera_target.translation += FRAME_TIME * speed * translation.normalize_to(1.0);
             }
 
-            camera.translation.lerp_to(camera_target.translation, 0.4);
-            camera.yaw.lerp_to(camera_target.yaw, 0.6);
-            camera.pitch.lerp_to(camera_target.pitch, 0.6);
+            camera.lerp_to(camera_target, 0.5);
 
             let mut passes: Vec<&dyn RenderPass> = vec![];
             passes.push(&world.gizmo_pass);
