@@ -11,7 +11,6 @@ pub struct Camera {
     pub translation: Vector3<f32>,
     pub yaw: f32,
     pub pitch: f32,
-    pub roll: f32,
     pub fovy: f32,
 }
 
@@ -29,7 +28,6 @@ impl Camera {
             translation: Vector3::new(0.0, 0.0, N as f32),
             yaw: 0.4 * TAU,
             pitch: 0.1 * TAU,
-            roll: 0.0,
             fovy: 60.0,
         }
     }
@@ -43,22 +41,19 @@ impl Camera {
     pub fn left(&self) -> Vector3<f32> {
         let yaw = Quaternion::from_angle_z(cgmath::Rad(self.yaw));
         let pitch = Quaternion::from_angle_y(cgmath::Rad(self.pitch));
-        let roll = Quaternion::from_angle_x(cgmath::Rad(self.roll));
-        (roll * pitch * yaw).conjugate() * vec3(0.0, -1.0, 0.0)
+        (pitch * yaw).conjugate() * vec3(0.0, -1.0, 0.0)
     }
 
     pub fn up(&self) -> Vector3<f32> {
         let yaw = Quaternion::from_angle_z(cgmath::Rad(self.yaw));
         let pitch = Quaternion::from_angle_y(cgmath::Rad(self.pitch));
-        let roll = Quaternion::from_angle_x(cgmath::Rad(self.roll));
-        (roll * pitch * yaw).conjugate() * vec3(0.0, 0.0, 1.0)
+        (pitch * yaw).conjugate() * vec3(0.0, 0.0, 1.0)
     }
 
     pub fn view_matrix(&self) -> Matrix4<f32> {
         let yaw = Quaternion::from_angle_z(cgmath::Rad(self.yaw));
         let pitch = Quaternion::from_angle_y(cgmath::Rad(self.pitch));
-        let roll = Quaternion::from_angle_x(cgmath::Rad(self.roll));
-        Matrix4::from(roll * pitch * yaw) * Matrix4::from_translation(-self.translation)
+        Matrix4::from(pitch * yaw) * Matrix4::from_translation(-self.translation)
     }
 
     pub fn proj_matrix(&self, aspect: f32) -> Matrix4<f32> {

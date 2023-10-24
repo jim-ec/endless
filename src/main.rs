@@ -94,22 +94,17 @@ async fn run() {
                 delta: MouseScrollDelta::PixelDelta(delta),
                 ..
             } => {
-                camera_target.yaw += camera.up().z.signum() * 0.005 * delta.x as f32;
-                camera_target.pitch += 0.005 * delta.y as f32;
-            }
-
-            WindowEvent::TouchpadRotate { delta, .. } => {
-                camera_target.roll += 0.025 * delta;
+                camera_target.yaw += camera_target.fovy * camera.up().z.signum() * 0.00008 * delta.x as f32;
+                camera_target.pitch += camera_target.fovy * 0.00008 * delta.y as f32;
             }
 
             WindowEvent::TouchpadMagnify { delta, .. } => {
-                camera_target.fovy += 25.0 * -delta as f32;
+                camera_target.fovy *= 1.0 + 0.5 * -delta as f32;
+                camera_target.fovy = camera_target.fovy.min(180.0);
             }
 
             WindowEvent::SmartMagnify { .. } => {
-                let initial = camera::Camera::initial();
-                camera_target.fovy = initial.fovy;
-                camera_target.roll = initial.roll;
+                camera_target.fovy = camera::Camera::initial().fovy;
             }
 
             _ => {}
