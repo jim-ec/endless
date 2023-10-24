@@ -30,17 +30,6 @@ impl Camera {
         }
     }
 
-    pub fn clamp_pitch(&mut self) {
-        self.pitch = self.pitch.clamp(-TAU / 4.0, TAU / 4.0);
-    }
-
-    // pub fn pan(&mut self, x: f32, y: f32) {
-    //     let orbit = Quaternion::from_angle_z(cgmath::Rad(self.orbit));
-    //     let tilt = Quaternion::from_angle_y(cgmath::Rad(self.tilt));
-    //     let rotation = tilt * orbit;
-    //     self.origin += rotation.conjugate() * vec3(0.0, x, y);
-    // }
-
     pub fn forward(&self) -> Vector3<f32> {
         let yaw = Quaternion::from_angle_z(cgmath::Rad(self.yaw));
         let pitch = Quaternion::from_angle_y(cgmath::Rad(self.pitch));
@@ -51,6 +40,12 @@ impl Camera {
         let yaw = Quaternion::from_angle_z(cgmath::Rad(self.yaw));
         let pitch = Quaternion::from_angle_y(cgmath::Rad(self.pitch));
         (pitch * yaw).conjugate() * vec3(0.0, -1.0, 0.0)
+    }
+
+    pub fn up(&self) -> Vector3<f32> {
+        let yaw = Quaternion::from_angle_z(cgmath::Rad(self.yaw));
+        let pitch = Quaternion::from_angle_y(cgmath::Rad(self.pitch));
+        (pitch * yaw).conjugate() * vec3(0.0, 0.0, 1.0)
     }
 
     pub fn view_matrix(&self) -> Matrix4<f32> {

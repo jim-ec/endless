@@ -94,9 +94,8 @@ async fn run() {
                 delta: MouseScrollDelta::PixelDelta(delta),
                 ..
             } => {
-                camera_target.yaw += 0.005 * delta.x as f32;
+                camera_target.yaw += camera.up().z.signum() * 0.005 * delta.x as f32;
                 camera_target.pitch += 0.005 * delta.y as f32;
-                camera_target.clamp_pitch();
             }
 
             _ => {}
@@ -110,13 +109,13 @@ async fn run() {
                 translation += camera_target.forward();
             }
             if w_down && alt_down {
-                translation.z += 1.0;
+                translation.z += camera.up().z.signum();
             }
             if s_down && !alt_down {
                 translation -= camera_target.forward();
             }
             if s_down && alt_down {
-                translation.z -= 1.0;
+                translation.z -= camera.up().z.signum();
             }
             if a_down {
                 translation += camera_target.left();
