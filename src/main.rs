@@ -34,6 +34,7 @@ async fn run() {
     let window = WindowBuilder::new()
         .with_title("")
         .with_visible(false)
+        .with_maximized(true)
         .build(&event_loop)
         .unwrap();
 
