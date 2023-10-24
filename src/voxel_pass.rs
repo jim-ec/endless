@@ -137,26 +137,13 @@ impl VoxelMesh {
                             CUBE_VERTICES[j as usize],
                             CUBE_VERTICES[k as usize],
                         ];
-                        let positions = [position + vs[0], position + vs[1], position + vs[2]];
                         let normal = (vs[2] - vs[0]).cross(vs[1] - vs[0]).normalize();
                         let color = color[[x, y, z]];
-                        vertices.extend([
-                            Vertex {
-                                position: positions[0],
-                                normal,
-                                color,
-                            },
-                            Vertex {
-                                position: positions[1],
-                                normal,
-                                color,
-                            },
-                            Vertex {
-                                position: positions[2],
-                                normal,
-                                color,
-                            },
-                        ]);
+                        vertices.extend(vs.into_iter().map(|v| Vertex {
+                            position: position + v,
+                            normal,
+                            color,
+                        }));
                     }
                 }
             }
