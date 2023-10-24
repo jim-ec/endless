@@ -31,17 +31,19 @@ impl World {
 
         let mut chunks = HashMap::new();
 
-        let n: isize = 6;
+        let n: isize = 2;
         for x in -n..=n {
             for y in -n..=n {
-                let c = vec3(x, y, 0);
-                let lod = x.unsigned_abs() + y.unsigned_abs();
-                let lod = lod >> 2;
+                for z in 0..=1 {
+                    let c = vec3(x, y, z);
+                    let lod = x.unsigned_abs() + y.unsigned_abs();
+                    let lod = lod >> 2;
 
-                if (N >> lod) > 0 {
-                    profile(&format!("Chunk ({x:+},{y:+},{:+}) @{lod}", 0), || {
-                        chunks.insert(c, Chunk::new(renderer, c, lod));
-                    });
+                    if (N >> lod) > 0 {
+                        profile(&format!("Chunk ({x:+},{y:+},{:+}) @{lod}", 0), || {
+                            chunks.insert(c, Chunk::new(renderer, c, lod));
+                        });
+                    }
                 }
             }
         }
@@ -81,8 +83,9 @@ impl Chunk {
         let rock_height_map: Field<f32, 2> = Field::new(extent, |[x, y]| {
             let mut n =
                 noise.get([scale as f64 * x as f64 + t.x, scale as f64 * y as f64 + t.y]) as f32;
-            n = rescale(n, -1.0..1.0, 0.1..0.9);
+            n = rescale(n, -1.0..1.0, 0.1..1.0);
             n = n.powf(1.5);
+            n -= translation.z as f32;
             n * extent as f32
         });
 
