@@ -58,6 +58,7 @@ async fn run() {
     let (chunk_sender, chunk_receiver) = mpsc::channel::<(Vector3<isize>, Chunk)>();
     let mut world = world::World::default();
     let tasks: Arc<Mutex<HashMap<Vector3<isize>, usize>>> = Default::default();
+    let generating_chunks: Arc<Mutex<HashSet<Vector3<isize>>>> = Default::default();
 
     // Spawn chunk worker threads
     for _ in 0..4 {
@@ -65,6 +66,7 @@ async fn run() {
         let tasks = tasks.clone();
         let player_cell = player_cell.clone();
         let chunk_sender = chunk_sender.clone();
+        let generating_chunks = generating_chunks.clone();
         thread::spawn(move || loop {
             let (key, lod) = {
                 let tasks = tasks.lock();
@@ -84,6 +86,7 @@ async fn run() {
             };
 
             // Generate the chunk. This can take a long time.
+            generating_chunks.lock().insert(key);
             let chunk = world::Chunk::new(key, lod, &device);
 
             {
@@ -92,6 +95,7 @@ async fn run() {
                 if let Some(&new_lod) = tasks.get(&key) {
                     if lod == new_lod {
                         // Worker generated the chunk we wanted
+                        generating_chunks.lock().remove(&key);
                         tasks.remove(&key);
                         chunk_sender.send((key, chunk)).unwrap();
                     }
@@ -345,6 +349,13 @@ async fn run() {
 
                     tasks.insert(key, lod);
                 }
+            }
+
+            for key in generating_chunks.lock().iter() {
+                renderer.gizmos.aabb(
+                    N as f32 * key.cast().unwrap(),
+                    N as f32 * (key + vec3(1, 1, 1)).cast().unwrap(),
+                );
             }
 
             match renderer.render(

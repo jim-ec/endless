@@ -24,7 +24,7 @@ pub struct Renderer {
     ui_ctx: egui::Context,
     depth_texture: wgpu::Texture,
     camera_symmetry: Symmetry,
-    gizmos: Gizmos,
+    pub gizmos: Gizmos,
     voxel_pipeline: VoxelPipeline,
     chunk_meshes: HashMap<Vector3<isize>, VoxelMesh>,
 }
@@ -141,8 +141,6 @@ impl Renderer {
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         let depth_texture_view = self.depth_texture.create_view(&Default::default());
-
-        self.gizmos.clear();
 
         self.camera_symmetry = self
             .camera_symmetry
@@ -310,6 +308,8 @@ impl Renderer {
         }
 
         surface_texture.present();
+
+        self.gizmos.clear();
 
         Ok(())
     }
