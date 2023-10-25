@@ -1,5 +1,4 @@
 struct Uniforms {
-    model: mat4x4<f32>,
     view: mat4x4<f32>,
     proj: mat4x4<f32>,
     camera_translation: vec3<f32>,
@@ -9,7 +8,7 @@ struct Uniforms {
 
 @vertex
 fn vertex(@location(0) position: vec3<f32>) -> @builtin(position) vec4<f32> {
-    return uniforms.proj * uniforms.view * uniforms.model * hom(position);
+    return uniforms.proj * uniforms.view * hom(position);
 }
 
 @fragment

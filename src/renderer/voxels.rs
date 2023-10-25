@@ -1,14 +1,31 @@
 use crate::{
+    camera,
     field::{Field, Vis},
-    renderer::{self, RenderPass, DEPTH_FORMAT},
+    renderer::{self, RenderJob, DEPTH_FORMAT},
     symmetry::Symmetry,
+    util,
 };
 use cgmath::{vec3, InnerSpace, Matrix4, Quaternion, Vector3};
 use wgpu::util::DeviceExt;
 
 pub struct VoxelPipeline {
     pipeline: wgpu::RenderPipeline,
+    uniform_bind_group: wgpu::BindGroup,
+    uniform_buffer: wgpu::Buffer,
+    pub camera: camera::Camera,
 }
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct Uniforms {
+    pub model: Matrix4<f32>,
+    pub view: Matrix4<f32>,
+    pub proj: Matrix4<f32>,
+    pub camera_translation: Vector3<f32>,
+}
+
+unsafe impl bytemuck::Pod for Uniforms {}
+unsafe impl bytemuck::Zeroable for Uniforms {}
 
 #[derive(Debug)]
 pub struct VoxelMesh {
@@ -27,6 +44,41 @@ pub struct Voxels<'a>(pub &'a VoxelPipeline, pub &'a VoxelMesh);
 
 impl VoxelPipeline {
     pub fn new(renderer: &renderer::Renderer) -> Self {
+        let uniform_bind_group_layout =
+            renderer
+                .device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: None,
+                    entries: &[wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    }],
+                });
+
+        let uniform_buffer = renderer.device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: util::align(std::mem::size_of::<Uniforms>(), 16) as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let uniform_bind_group = renderer
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: None,
+                layout: &uniform_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                }],
+            });
+
         let shader = renderer
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -46,7 +98,7 @@ impl VoxelPipeline {
                 label: None,
                 layout: Some(&renderer.device.create_pipeline_layout(
                     &wgpu::PipelineLayoutDescriptor {
-                        bind_group_layouts: &[&renderer.uniform_bind_group_layout],
+                        bind_group_layouts: &[&uniform_bind_group_layout],
                         ..Default::default()
                     },
                 )),
@@ -106,7 +158,12 @@ impl VoxelPipeline {
                 multiview: None,
             });
 
-        Self { pipeline }
+        Self {
+            pipeline,
+            uniform_buffer,
+            uniform_bind_group,
+            camera: camera::Camera::initial(),
+        }
     }
 }
 
@@ -207,16 +264,28 @@ const CUBE_FACE_Y_1: [[u16; 3]; 2] = [[7, 3, 2], [7, 2, 6]];
 const CUBE_FACE_Z_0: [[u16; 3]; 2] = [[0, 2, 3], [0, 3, 1]];
 const CUBE_FACE_Z_1: [[u16; 3]; 2] = [[4, 5, 7], [4, 7, 6]];
 
-impl<'a> RenderPass for Voxels<'a> {
-    fn render<'p: 'r, 'r>(&'p self, _queue: &wgpu::Queue, render_pass: &mut wgpu::RenderPass<'r>) {
+impl<'a> RenderJob for Voxels<'a> {
+    fn prepare(&self, queue: &wgpu::Queue, config: &wgpu::SurfaceConfiguration) {
         let Voxels(pipeline, mesh) = self;
-        render_pass.set_pipeline(&pipeline.pipeline);
-        render_pass.set_vertex_buffer(0, mesh.buffer.slice(..));
-        render_pass.draw(0..mesh.count as u32, 0..1);
+        queue.write_buffer(
+            &pipeline.uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[Uniforms {
+                model: mesh.symmetry.matrix(),
+                view: pipeline.camera.view_matrix(),
+                proj: pipeline
+                    .camera
+                    .proj_matrix(config.width as f32 / config.height as f32),
+                camera_translation: pipeline.camera.translation,
+            }]),
+        );
     }
 
-    fn model_matrix(&self) -> Matrix4<f32> {
-        let Voxels(_, mesh) = self;
-        mesh.symmetry.matrix()
+    fn render<'p: 'r, 'r>(&'p self, render_pass: &mut wgpu::RenderPass<'r>) {
+        let Voxels(pipeline, mesh) = self;
+        render_pass.set_pipeline(&pipeline.pipeline);
+        render_pass.set_bind_group(0, &pipeline.uniform_bind_group, &[]);
+        render_pass.set_vertex_buffer(0, mesh.buffer.slice(..));
+        render_pass.draw(0..mesh.count as u32, 0..1);
     }
 }

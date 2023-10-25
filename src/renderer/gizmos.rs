@@ -1,12 +1,30 @@
-use cgmath::{Matrix4, SquareMatrix, Vector3};
+use cgmath::{Matrix4, Vector3};
 
-use crate::renderer::{RenderPass, Renderer, DEPTH_FORMAT};
+use crate::{
+    camera,
+    renderer::{RenderJob, Renderer, DEPTH_FORMAT},
+    util,
+};
 
 pub struct Gizmos {
     gizmos: Vec<Gizmo>,
-    buffer: wgpu::Buffer,
+    vertex_buffer: wgpu::Buffer,
     pipeline: wgpu::RenderPipeline,
+    uniform_bind_group: wgpu::BindGroup,
+    uniform_buffer: wgpu::Buffer,
+    pub camera: camera::Camera,
 }
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct Uniforms {
+    pub view: Matrix4<f32>,
+    pub proj: Matrix4<f32>,
+    pub camera_translation: Vector3<f32>,
+}
+
+unsafe impl bytemuck::Pod for Uniforms {}
+unsafe impl bytemuck::Zeroable for Uniforms {}
 
 #[derive(Clone, Copy, Debug)]
 struct Gizmo(Vector3<f32>, Vector3<f32>);
@@ -16,12 +34,47 @@ unsafe impl bytemuck::Zeroable for Gizmo {}
 
 impl Gizmos {
     pub fn new(renderer: &Renderer) -> Self {
-        let buffer = renderer.device.create_buffer(&wgpu::BufferDescriptor {
+        let vertex_buffer = renderer.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
             size: 2048 * std::mem::size_of::<Gizmo>() as wgpu::BufferAddress,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+
+        let uniform_bind_group_layout =
+            renderer
+                .device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: None,
+                    entries: &[wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    }],
+                });
+
+        let uniform_buffer = renderer.device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: util::align(std::mem::size_of::<Uniforms>(), 16) as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let uniform_bind_group = renderer
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: None,
+                layout: &uniform_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                }],
+            });
 
         let shader = renderer
             .device
@@ -42,7 +95,7 @@ impl Gizmos {
                 label: None,
                 layout: Some(&renderer.device.create_pipeline_layout(
                     &wgpu::PipelineLayoutDescriptor {
-                        bind_group_layouts: &[&renderer.uniform_bind_group_layout],
+                        bind_group_layouts: &[&uniform_bind_group_layout],
                         ..Default::default()
                     },
                 )),
@@ -90,8 +143,11 @@ impl Gizmos {
 
         Self {
             gizmos: Vec::new(),
-            buffer,
+            vertex_buffer,
             pipeline,
+            uniform_bind_group,
+            uniform_buffer,
+            camera: camera::Camera::initial(),
         }
     }
 
@@ -137,20 +193,30 @@ impl Gizmos {
     }
 }
 
-impl RenderPass for Gizmos {
-    fn render<'p: 'r, 'r>(&'p self, queue: &wgpu::Queue, render_pass: &mut wgpu::RenderPass<'r>) {
-        render_pass.set_pipeline(&self.pipeline);
-        render_pass.set_vertex_buffer(0, self.buffer.slice(..));
-        render_pass.draw(0..2 * self.gizmos.len() as u32, 0..1);
-
+impl RenderJob for Gizmos {
+    fn prepare(&self, queue: &wgpu::Queue, config: &wgpu::SurfaceConfiguration) {
         queue.write_buffer(
-            &self.buffer,
+            &self.uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[Uniforms {
+                view: self.camera.view_matrix(),
+                proj: self
+                    .camera
+                    .proj_matrix(config.width as f32 / config.height as f32),
+                camera_translation: self.camera.translation,
+            }]),
+        );
+        queue.write_buffer(
+            &self.vertex_buffer,
             0,
             bytemuck::cast_slice(self.gizmos.as_slice()),
         );
     }
 
-    fn model_matrix(&self) -> Matrix4<f32> {
-        Matrix4::identity()
+    fn render<'p: 'r, 'r>(&'p self, render_pass: &mut wgpu::RenderPass<'r>) {
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        render_pass.draw(0..2 * self.gizmos.len() as u32, 0..1);
     }
 }

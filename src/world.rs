@@ -16,8 +16,8 @@ use crate::{
 pub const N: usize = 64;
 
 pub struct World {
-    pub voxel_pipeline: VoxelPipeline,
-    pub gizmo_pass: Gizmos,
+    pub voxels: VoxelPipeline,
+    pub gizmos: Gizmos,
     pub chunks: HashMap<Vector3<isize>, Chunk>,
 }
 
@@ -54,8 +54,8 @@ impl World {
         gizmo_pass.aabb(Vector3::zero(), Vector3::new(N as f32, N as f32, N as f32));
 
         World {
-            voxel_pipeline: VoxelPipeline::new(renderer),
-            gizmo_pass,
+            voxels: VoxelPipeline::new(renderer),
+            gizmos: gizmo_pass,
             chunks,
         }
     }

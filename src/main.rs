@@ -10,7 +10,7 @@ mod world;
 use cgmath::{InnerSpace, Vector3};
 use lerp::Lerp;
 use pollster::FutureExt;
-use renderer::{voxels::Voxels, RenderPass};
+use renderer::{voxels::Voxels, RenderJob};
 use std::time::{Duration, Instant};
 use winit::{
     event::*,
@@ -36,11 +36,10 @@ async fn run() {
         .unwrap();
 
     let mut renderer = renderer::Renderer::new(&window).await;
-    let world = util::profile("World generation", || world::World::new(&mut renderer));
+    let mut world = util::profile("World generation", || world::World::new(&mut renderer));
     println!("Triangle count: {}", renderer.triangle_count);
 
     let mut camera = camera::Camera::initial();
-    let mut camera_target = camera;
     let mut w_down = false;
     let mut s_down = false;
     let mut a_down = false;
@@ -93,7 +92,7 @@ async fn run() {
                 new_inner_size: &mut size,
                 ..
             } => {
-                renderer.resize(size);
+                renderer.resize(size.width, size.height);
                 window.request_redraw();
             }
 
@@ -101,9 +100,8 @@ async fn run() {
                 delta: MouseScrollDelta::PixelDelta(delta),
                 ..
             } => {
-                camera_target.yaw +=
-                    camera_target.fovy * camera.up().z.signum() * 0.00008 * delta.x as f32;
-                camera_target.pitch += camera_target.fovy * 0.00008 * delta.y as f32;
+                camera.yaw += camera.fovy * camera.up().z.signum() * 0.00008 * delta.x as f32;
+                camera.pitch += camera.fovy * 0.00008 * delta.y as f32;
             }
 
             WindowEvent::CursorMoved { position, .. } => {
@@ -139,12 +137,12 @@ async fn run() {
             }
 
             WindowEvent::TouchpadMagnify { delta, .. } => {
-                camera_target.fovy *= 1.0 + 0.5 * -delta as f32;
-                camera_target.fovy = camera_target.fovy.min(180.0);
+                camera.fovy *= 1.0 + 0.5 * -delta as f32;
+                camera.fovy = camera.fovy.min(180.0);
             }
 
             WindowEvent::SmartMagnify { .. } => {
-                camera_target.fovy = camera::Camera::initial().fovy;
+                camera.fovy = camera::Camera::initial().fovy;
             }
 
             _ => {}
@@ -155,43 +153,44 @@ async fn run() {
 
             let mut translation = Vector3::new(0.0, 0.0, 0.0);
             if w_down && !alt_down {
-                translation += camera_target.forward();
+                translation += camera.forward();
             }
             if w_down && alt_down {
                 translation.z += camera.up().z.signum();
             }
             if s_down && !alt_down {
-                translation -= camera_target.forward();
+                translation -= camera.forward();
             }
             if s_down && alt_down {
                 translation.z -= camera.up().z.signum();
             }
             if a_down {
-                translation += camera_target.left();
+                translation += camera.left();
             }
             if d_down {
-                translation -= camera_target.left();
+                translation -= camera.left();
             }
             if translation.magnitude2() > 0.0 {
                 let speed = if shift_down { 500.0 } else { 100.0 };
-                camera_target.translation += FRAME_TIME * speed * translation.normalize_to(1.0);
+                camera.translation += FRAME_TIME * speed * translation.normalize_to(1.0);
             }
 
-            camera.lerp_to(camera_target, 0.5);
+            world.voxels.camera.lerp_to(camera, 0.5);
+            world.gizmos.camera.lerp_to(camera, 0.5);
 
-            let mut passes: Vec<&dyn RenderPass> = vec![];
-            passes.push(&world.gizmo_pass);
+            let mut jobs: Vec<&dyn RenderJob> = vec![];
+            jobs.push(&world.gizmos);
             let mut voxel_passes = vec![];
-            passes.push(&world.gizmo_pass);
+            jobs.push(&world.gizmos);
             for chunk in world.chunks.values() {
-                voxel_passes.push(Voxels(&world.voxel_pipeline, &chunk.mesh));
+                voxel_passes.push(Voxels(&world.voxels, &chunk.mesh));
             }
-            passes.extend(voxel_passes.iter().map(|p| p as &dyn RenderPass));
+            jobs.extend(voxel_passes.iter().map(|p| p as &dyn RenderJob));
 
             let input = egui::RawInput {
                 screen_rect: Some(egui::Rect::from_min_size(
                     egui::Pos2::ZERO,
-                    egui::vec2(renderer.size.width as f32, renderer.size.height as f32),
+                    egui::vec2(renderer.config.width as f32, renderer.config.height as f32),
                 )),
                 pixels_per_point: Some(window.scale_factor() as f32),
                 events: std::mem::take(&mut events),
@@ -208,7 +207,7 @@ async fn run() {
                         #[cfg(not(debug_assertions))]
                         ui.label(egui::RichText::new("Release Build").strong());
 
-                        ui.add(egui::Slider::new(&mut camera_target.fovy, 1.0..=180.0).text("FoV"));
+                        ui.add(egui::Slider::new(&mut camera.fovy, 1.0..=180.0).text("FoV"));
                     });
             });
 
@@ -260,14 +259,15 @@ async fn run() {
             let tris = ctx.tessellate(output.shapes);
 
             match renderer.render(
-                &camera,
-                &passes,
+                &jobs,
                 &mut egui_renderer,
                 &tris,
                 window.scale_factor() as f32,
             ) {
                 Ok(_) => {}
-                Err(wgpu::SurfaceError::Lost) => renderer.resize(renderer.size),
+                Err(wgpu::SurfaceError::Lost) => {
+                    renderer.resize(renderer.config.width, renderer.config.height);
+                }
                 Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                 Err(wgpu::SurfaceError::Timeout) | Err(wgpu::SurfaceError::Outdated) => (),
             }

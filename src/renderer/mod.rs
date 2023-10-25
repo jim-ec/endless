@@ -1,10 +1,7 @@
 pub mod gizmos;
 pub mod voxels;
 
-use cgmath::{Matrix4, SquareMatrix, Vector3};
 use winit::window::Window;
-
-use crate::{camera, util};
 
 pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth24Plus;
 
@@ -13,33 +10,14 @@ pub struct Renderer {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
-    pub size: winit::dpi::PhysicalSize<u32>,
-    pub uniform_bind_group: wgpu::BindGroup,
-    pub uniform_bind_group_layout: wgpu::BindGroupLayout,
-    uniform_buffer: wgpu::Buffer,
-    pub depth_texture: wgpu::Texture,
+    depth_texture: wgpu::Texture,
     pub triangle_count: usize,
 }
 
-#[repr(C)]
-#[derive(Copy, Clone, Debug)]
-pub struct Uniforms {
-    pub model: Matrix4<f32>,
-    pub view: Matrix4<f32>,
-    pub proj: Matrix4<f32>,
-    pub camera_translation: Vector3<f32>,
-}
+pub trait RenderJob {
+    fn prepare(&self, queue: &wgpu::Queue, config: &wgpu::SurfaceConfiguration);
 
-unsafe impl bytemuck::Pod for Uniforms {}
-unsafe impl bytemuck::Zeroable for Uniforms {}
-
-pub trait RenderPass {
-    fn model_matrix(&self) -> Matrix4<f32>;
-    fn render<'p: 'r, 'r>(&'p self, queue: &wgpu::Queue, render_pass: &mut wgpu::RenderPass<'r>);
-}
-
-pub trait RenderNode {
-    fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue);
+    fn render<'p: 'r, 'r>(&'p self, render_pass: &mut wgpu::RenderPass<'r>);
 }
 
 impl Renderer {
@@ -79,37 +57,6 @@ impl Renderer {
 
         surface.configure(&device, &config);
 
-        let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
-            size: util::align(std::mem::size_of::<Uniforms>(), 16) as wgpu::BufferAddress,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        let uniform_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: None,
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-            });
-
-        let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: &uniform_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform_buffer.as_entire_binding(),
-            }],
-        });
-
         let depth_texture = device.create_texture(
             &(wgpu::TextureDescriptor {
                 label: None,
@@ -132,22 +79,17 @@ impl Renderer {
             device,
             queue,
             config,
-            size,
-            uniform_bind_group,
-            uniform_bind_group_layout,
             depth_texture,
-            uniform_buffer,
             triangle_count: 0,
         }
     }
 
-    pub fn resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
-        if size.width == 0 || size.height == 0 {
+    pub fn resize(&mut self, width: u32, height: u32) {
+        if width == 0 || height == 0 {
             return;
         }
-        self.size = size;
-        self.config.width = size.width;
-        self.config.height = size.height;
+        self.config.width = width;
+        self.config.height = height;
         self.surface.configure(&self.device, &self.config);
 
         self.depth_texture = self.device.create_texture(
@@ -170,8 +112,7 @@ impl Renderer {
 
     pub fn render(
         &self,
-        camera: &camera::Camera,
-        passes: &[&dyn RenderPass],
+        jobs: &[&dyn RenderJob],
         egui_renderer: &mut egui_wgpu::Renderer,
         egui_mesh: &[egui::ClippedPrimitive],
         dpi: f32,
@@ -180,13 +121,6 @@ impl Renderer {
         let view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-
-        let mut uniforms = Uniforms {
-            model: Matrix4::identity(),
-            view: camera.view_matrix(),
-            proj: camera.proj_matrix(self.size.width as f32 / self.size.height as f32),
-            camera_translation: camera.translation,
-        };
 
         let depth_texture_view = self.depth_texture.create_view(&Default::default());
 
@@ -219,12 +153,10 @@ impl Renderer {
             self.queue.submit(Some(command_encoder.finish()));
         }
 
-        for pass in passes {
-            let mut command_encoder = self.device.create_command_encoder(&Default::default());
+        for job in jobs {
+            job.prepare(&self.queue, &self.config);
 
-            uniforms.model = pass.model_matrix();
-            self.queue
-                .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
+            let mut command_encoder = self.device.create_command_encoder(&Default::default());
 
             let mut render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -246,9 +178,7 @@ impl Renderer {
                 ..Default::default()
             });
 
-            render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-
-            pass.render(&self.queue, &mut render_pass);
+            job.render(&mut render_pass);
 
             drop(render_pass);
             self.queue.submit(Some(command_encoder.finish()));
@@ -263,7 +193,7 @@ impl Renderer {
                 &mut command_encoder,
                 egui_mesh,
                 &egui_wgpu::renderer::ScreenDescriptor {
-                    size_in_pixels: [self.size.width, self.size.height],
+                    size_in_pixels: [self.config.width, self.config.height],
                     pixels_per_point: dpi,
                 },
             );
@@ -292,7 +222,7 @@ impl Renderer {
                 &mut render_pass,
                 egui_mesh,
                 &egui_wgpu::renderer::ScreenDescriptor {
-                    size_in_pixels: [self.size.width, self.size.height],
+                    size_in_pixels: [self.config.width, self.config.height],
                     pixels_per_point: dpi,
                 },
             );
