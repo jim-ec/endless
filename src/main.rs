@@ -59,10 +59,12 @@ async fn run() {
     let mut world = world::World::default();
     let tasks: Arc<Mutex<HashMap<Vector3<isize>, usize>>> = Default::default();
 
-    {
+    // Spawn chunk worker threads
+    for _ in 0..4 {
         let device = renderer.device.clone();
         let tasks = tasks.clone();
         let player_cell = player_cell.clone();
+        let chunk_sender = chunk_sender.clone();
         thread::spawn(move || loop {
             let (key, lod) = {
                 let tasks = tasks.lock();
