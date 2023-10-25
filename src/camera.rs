@@ -20,6 +20,12 @@ const Y_UP: Matrix4<f32> = Matrix4::from_cols(
     Vector4::new(0.0, 0.0, 0.0, 1.0),
 );
 
+impl Default for Camera {
+    fn default() -> Self {
+        Self::initial()
+    }
+}
+
 impl Camera {
     pub fn initial() -> Self {
         Self {

@@ -3,14 +3,10 @@ pub mod voxels;
 
 use std::{collections::HashMap, sync::Arc};
 
-use cgmath::{vec3, Vector3};
+use cgmath::Vector3;
 use winit::window::Window;
 
-use crate::{
-    camera,
-    symmetry::Symmetry,
-    world::{Chunk, N},
-};
+use crate::{camera, symmetry::Symmetry, world::Chunk};
 
 use self::{
     gizmos::Gizmos,
@@ -186,7 +182,7 @@ impl Renderer {
         }
 
         // Chunks
-        for (index, chunk) in chunks {
+        for chunk in chunks.values() {
             self.voxel_pipeline.prepare(
                 &self.queue,
                 &chunk.voxel_mesh,
@@ -222,11 +218,6 @@ impl Renderer {
 
             drop(render_pass);
             self.queue.submit([command_encoder.finish()]);
-
-            self.gizmos.aabb(
-                N as f32 * index.cast().unwrap(),
-                N as f32 * (index + vec3(1, 1, 1)).cast().unwrap(),
-            );
         }
 
         // Gizmos
@@ -258,7 +249,7 @@ impl Renderer {
             self.gizmos.render(&mut render_pass);
 
             drop(render_pass);
-            // self.queue.submit([command_encoder.finish()]);
+            self.queue.submit([command_encoder.finish()]);
         }
 
         // UI

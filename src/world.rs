@@ -26,8 +26,6 @@ pub struct Chunk {
 
 impl Chunk {
     pub fn new(key: Vector3<isize>, lod: usize, device: &wgpu::Device) -> Self {
-        println!("Generating chunk ({},{},{}) @{}", key.x, key.y, key.z, lod);
-
         use noise::{Fbm, Perlin, Turbulence};
         let mut noise = Fbm::<Perlin>::new(0);
         noise.frequency = 0.01;

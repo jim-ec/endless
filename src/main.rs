@@ -7,10 +7,12 @@ mod symmetry;
 mod util;
 mod world;
 
-use cgmath::{vec3, InnerSpace, Vector3};
+use cgmath::{vec3, InnerSpace, Vector3, Zero};
+use egui::mutex::Mutex;
 use pollster::FutureExt;
+use std::collections::HashMap;
 use std::f32::consts::TAU;
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc};
 use std::thread;
 use std::{
     collections::HashSet,
@@ -42,7 +44,8 @@ async fn run() {
 
     let mut renderer = renderer::Renderer::new(&window).await;
 
-    let mut camera = camera::Camera::initial();
+    let mut camera = camera::Camera::default();
+    let player_cell = Arc::new(Mutex::new(Vector3::zero()));
     let mut w_down = false;
     let mut s_down = false;
     let mut a_down = false;
@@ -52,17 +55,45 @@ async fn run() {
 
     let mut events = vec![];
 
-    let (task_sender, task_receiver) = mpsc::channel::<(Vector3<isize>, usize)>();
     let (chunk_sender, chunk_receiver) = mpsc::channel::<(Vector3<isize>, Chunk)>();
     let mut world = world::World::default();
-    let mut ordered_chunks = HashSet::<(Vector3<isize>, usize)>::new();
+    let tasks: Arc<Mutex<HashMap<Vector3<isize>, usize>>> = Default::default();
 
     {
         let device = renderer.device.clone();
-        thread::spawn(move || {
-            while let Ok((key, lod)) = task_receiver.recv() {
-                let chunk = world::Chunk::new(key, lod, &device);
-                chunk_sender.send((key, chunk)).unwrap();
+        let tasks = tasks.clone();
+        let player_cell = player_cell.clone();
+        thread::spawn(move || loop {
+            let (key, lod) = {
+                let tasks = tasks.lock();
+                let player_cell = *player_cell.lock();
+
+                // Get next task, order by distance to camera
+                let Some((&key, &lod)) = tasks.iter().min_by_key(|(&key, &lod)| {
+                    let distance = (key - player_cell).magnitude2();
+                    (distance, lod)
+                }) else {
+                    // No task available, sleep for a bit
+                    thread::yield_now();
+                    continue;
+                };
+
+                (key, lod)
+            };
+
+            // Generate the chunk. This can take a long time.
+            let chunk = world::Chunk::new(key, lod, &device);
+
+            {
+                // Check if the task is still valid
+                let mut tasks = tasks.lock();
+                if let Some(&new_lod) = tasks.get(&key) {
+                    if lod == new_lod {
+                        // Worker generated the chunk we wanted
+                        tasks.remove(&key);
+                        chunk_sender.send((key, chunk)).unwrap();
+                    }
+                };
             }
         });
     }
@@ -253,46 +284,7 @@ async fn run() {
                 .cast()
                 .unwrap();
 
-            let lod_shift = 1;
-            let radius = 2;
-
-            let mut required_chunks = HashSet::new();
-            for x in -radius..=radius {
-                for y in -radius..=radius {
-                    for z in 0..=1 {
-                        let c = vec3(camera_index.x + x, camera_index.y + y, z);
-                        let lod = x.unsigned_abs() + y.unsigned_abs();
-                        let lod = lod >> lod_shift;
-                        if (N >> lod) > 0 {
-                            required_chunks.insert((c, lod));
-                        }
-                    }
-                }
-            }
-
-            world.chunks.retain(|&key, chunk| {
-                let exists = required_chunks.contains(&(key, chunk.lod));
-                if exists {
-                    required_chunks.remove(&(key, chunk.lod));
-                }
-                exists
-            });
-
-            // required_chunks.iter().sorted_by_key(|(key, lod)| {});
-            // for required_chunk in required_chunks {
-            //     let (key, lod) = required_chunk;
-            //     world
-            //         .chunks
-            //         .insert(key, world::Chunk::new(key, lod, &renderer.device));
-            // }
-            for required_chunk in required_chunks {
-                if !ordered_chunks.contains(&required_chunk) {
-                    task_sender.send(required_chunk).unwrap();
-                    ordered_chunks.insert(required_chunk);
-                }
-            }
             while let Ok((key, chunk)) = chunk_receiver.try_recv() {
-                ordered_chunks.remove(&(key, chunk.lod));
                 world.chunks.insert(
                     key,
                     world::Chunk {
@@ -302,6 +294,55 @@ async fn run() {
                         voxel_mesh: chunk.voxel_mesh,
                     },
                 );
+            }
+
+            let lod_shift = 2;
+            let radius = 4;
+
+            let mut required_chunks = HashSet::new();
+
+            *player_cell.lock() = camera_index;
+
+            // Delete chunks that are outside the generation radius
+            world.chunks.retain(|&key, _| {
+                let d = (key - camera_index).map(isize::abs);
+                d.x <= radius && d.y <= radius
+            });
+
+            // Gather all required chunks and their LoDs based on the camera position
+            for x in -radius..=radius {
+                for y in -radius..=radius {
+                    for z in 0..=1 {
+                        let c = vec3(camera_index.x + x, camera_index.y + y, z);
+                        let lod = x.unsigned_abs().min(y.unsigned_abs());
+                        let lod = lod >> lod_shift;
+                        if (N >> lod) > 0 {
+                            required_chunks.insert((c, lod));
+                        }
+                    }
+                }
+            }
+
+            // Record new chunk generation tasks
+            {
+                let mut tasks = tasks.lock();
+                for (key, lod) in required_chunks {
+                    // Check if the task is already in progress
+                    if let Some(&old_lod) = tasks.get(&key) {
+                        if lod == old_lod {
+                            continue;
+                        }
+                    }
+
+                    // Check if the task is already done
+                    if let Some(chunk) = world.chunks.get(&key) {
+                        if chunk.lod == lod {
+                            continue;
+                        }
+                    }
+
+                    tasks.insert(key, lod);
+                }
             }
 
             match renderer.render(
