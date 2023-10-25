@@ -59,15 +59,7 @@ async fn run() {
     );
 
     let ctx = egui::Context::default();
-
-    let input = egui::RawInput {
-        screen_rect: Some(egui::Rect::from_min_size(
-            egui::Pos2::ZERO,
-            egui::vec2(renderer.size.width as f32, renderer.size.height as f32),
-        )),
-        pixels_per_point: Some(2.0),
-        ..Default::default()
-    };
+    let mut events = vec![];
 
     event_loop.run(move |event, _, control_flow| match event {
         Event::NewEvents(winit::event::StartCause::Init) => {
@@ -115,6 +107,38 @@ async fn run() {
                 camera_target.yaw +=
                     camera_target.fovy * camera.up().z.signum() * 0.00008 * delta.x as f32;
                 camera_target.pitch += camera_target.fovy * 0.00008 * delta.y as f32;
+            }
+
+            WindowEvent::CursorMoved { position, .. } => {
+                events.push(egui::Event::PointerMoved(egui::pos2(
+                    position.x as f32 / window.scale_factor() as f32,
+                    position.y as f32 / window.scale_factor() as f32,
+                )));
+            }
+
+            WindowEvent::MouseInput { button, state, .. } => {
+                let Some(pos) = events
+                    .iter()
+                    .rev()
+                    .filter_map(|e| match e {
+                        &egui::Event::PointerMoved(pos) => Some(pos),
+                        _ => None,
+                    })
+                    .next()
+                else {
+                    return;
+                };
+                events.push(egui::Event::PointerButton {
+                    pos,
+                    button: match button {
+                        MouseButton::Left => egui::PointerButton::Primary,
+                        MouseButton::Right => egui::PointerButton::Secondary,
+                        MouseButton::Middle => egui::PointerButton::Middle,
+                        MouseButton::Other(_) => return,
+                    },
+                    pressed: state == ElementState::Pressed,
+                    modifiers: Default::default(),
+                })
             }
 
             WindowEvent::TouchpadMagnify { delta, .. } => {
@@ -167,7 +191,17 @@ async fn run() {
             }
             passes.extend(voxel_passes.iter().map(|p| p as &dyn RenderPass));
 
-            let output: egui::FullOutput = ctx.run(input.clone(), |ctx| {
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(renderer.size.width as f32, renderer.size.height as f32),
+                )),
+                pixels_per_point: Some(window.scale_factor() as f32),
+                events: std::mem::take(&mut events),
+                ..Default::default()
+            };
+
+            let output: egui::FullOutput = ctx.run(input, |ctx| {
                 egui::Window::new("")
                     .title_bar(false)
                     .resizable(false)
@@ -177,8 +211,46 @@ async fn run() {
                         #[cfg(not(debug_assertions))]
                         ui.label(egui::RichText::new("Release Build").strong());
 
-                        ui.label(format!("FoV: {:.2}°", camera_target.fovy));
+                        ui.add(egui::Slider::new(&mut camera_target.fovy, 1.0..=180.0).text("FoV"));
                     });
+            });
+
+            window.set_cursor_icon(match output.platform_output.cursor_icon {
+                egui::CursorIcon::Default => winit::window::CursorIcon::Default,
+                egui::CursorIcon::None => winit::window::CursorIcon::Default,
+                egui::CursorIcon::ContextMenu => winit::window::CursorIcon::ContextMenu,
+                egui::CursorIcon::Help => winit::window::CursorIcon::Help,
+                egui::CursorIcon::PointingHand => winit::window::CursorIcon::Hand,
+                egui::CursorIcon::Progress => winit::window::CursorIcon::Progress,
+                egui::CursorIcon::Wait => winit::window::CursorIcon::Wait,
+                egui::CursorIcon::Cell => winit::window::CursorIcon::Cell,
+                egui::CursorIcon::Crosshair => winit::window::CursorIcon::Crosshair,
+                egui::CursorIcon::Text => winit::window::CursorIcon::Text,
+                egui::CursorIcon::VerticalText => winit::window::CursorIcon::VerticalText,
+                egui::CursorIcon::Alias => winit::window::CursorIcon::Alias,
+                egui::CursorIcon::Copy => winit::window::CursorIcon::Copy,
+                egui::CursorIcon::Move => winit::window::CursorIcon::Move,
+                egui::CursorIcon::NoDrop => winit::window::CursorIcon::NoDrop,
+                egui::CursorIcon::NotAllowed => winit::window::CursorIcon::NotAllowed,
+                egui::CursorIcon::Grab => winit::window::CursorIcon::Grab,
+                egui::CursorIcon::Grabbing => winit::window::CursorIcon::Grabbing,
+                egui::CursorIcon::AllScroll => winit::window::CursorIcon::AllScroll,
+                egui::CursorIcon::ResizeHorizontal => winit::window::CursorIcon::EwResize,
+                egui::CursorIcon::ResizeNeSw => winit::window::CursorIcon::NeswResize,
+                egui::CursorIcon::ResizeNwSe => winit::window::CursorIcon::NwseResize,
+                egui::CursorIcon::ResizeVertical => winit::window::CursorIcon::NsResize,
+                egui::CursorIcon::ResizeEast => winit::window::CursorIcon::EResize,
+                egui::CursorIcon::ResizeSouthEast => winit::window::CursorIcon::SeResize,
+                egui::CursorIcon::ResizeSouth => winit::window::CursorIcon::SResize,
+                egui::CursorIcon::ResizeSouthWest => winit::window::CursorIcon::SwResize,
+                egui::CursorIcon::ResizeWest => winit::window::CursorIcon::WResize,
+                egui::CursorIcon::ResizeNorthWest => winit::window::CursorIcon::NwResize,
+                egui::CursorIcon::ResizeNorth => winit::window::CursorIcon::NResize,
+                egui::CursorIcon::ResizeNorthEast => winit::window::CursorIcon::NeResize,
+                egui::CursorIcon::ResizeColumn => winit::window::CursorIcon::ColResize,
+                egui::CursorIcon::ResizeRow => winit::window::CursorIcon::RowResize,
+                egui::CursorIcon::ZoomIn => winit::window::CursorIcon::ZoomIn,
+                egui::CursorIcon::ZoomOut => winit::window::CursorIcon::ZoomOut,
             });
 
             for (id, delta) in &output.textures_delta.set {
@@ -190,7 +262,13 @@ async fn run() {
 
             let tris = ctx.tessellate(output.shapes);
 
-            match renderer.render(&camera, &passes, &mut egui_renderer, &tris) {
+            match renderer.render(
+                &camera,
+                &passes,
+                &mut egui_renderer,
+                &tris,
+                window.scale_factor() as f32,
+            ) {
                 Ok(_) => {}
                 Err(wgpu::SurfaceError::Lost) => renderer.resize(renderer.size),
                 Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,

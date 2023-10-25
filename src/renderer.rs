@@ -178,6 +178,7 @@ impl Renderer {
         passes: &[&dyn RenderPass],
         egui_renderer: &mut egui_wgpu::Renderer,
         egui_mesh: &[egui::ClippedPrimitive],
+        dpi: f32,
     ) -> Result<(), wgpu::SurfaceError> {
         let surface_texture = self.surface.get_current_texture()?;
         let view = surface_texture
@@ -267,7 +268,7 @@ impl Renderer {
                 egui_mesh,
                 &egui_wgpu::renderer::ScreenDescriptor {
                     size_in_pixels: [self.size.width, self.size.height],
-                    pixels_per_point: 2.0,
+                    pixels_per_point: dpi,
                 },
             );
 
@@ -296,7 +297,7 @@ impl Renderer {
                 egui_mesh,
                 &egui_wgpu::renderer::ScreenDescriptor {
                     size_in_pixels: [self.size.width, self.size.height],
-                    pixels_per_point: 2.0,
+                    pixels_per_point: dpi,
                 },
             );
             drop(render_pass);
