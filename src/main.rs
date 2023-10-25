@@ -29,12 +29,12 @@ async fn run() {
     let window = WindowBuilder::new()
         .with_title("")
         .with_visible(false)
-        // .with_maximized(true)
+        .with_maximized(true)
         .build(&event_loop)
         .unwrap();
 
     let mut renderer = renderer::Renderer::new(&window).await;
-    let world = util::profile("World generation", || world::World::new(&renderer.device));
+    let world = world::World::new();
 
     let mut camera = camera::Camera::initial();
     let mut w_down = false;

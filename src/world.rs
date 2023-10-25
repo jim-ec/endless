@@ -5,7 +5,6 @@ use noise::NoiseFn;
 
 use crate::{
     field::Field,
-    renderer::voxels::VoxelMesh,
     util::{profile, rescale, rgb},
 };
 
@@ -18,11 +17,10 @@ pub struct World {
 pub struct Chunk {
     pub mask: Field<bool, 3>,
     pub color: Field<Vector3<f32>, 3>,
-    pub mesh: VoxelMesh,
 }
 
 impl World {
-    pub fn new(device: &wgpu::Device) -> World {
+    pub fn new() -> World {
         println!("Voxels: {}x{}x{} = {}", N, N, N, N.pow(3));
 
         let mut chunks = HashMap::new();
@@ -37,7 +35,7 @@ impl World {
 
                     if (N >> lod) > 0 {
                         profile(&format!("Chunk ({x:+},{y:+},{:+}) @{lod}", 0), || {
-                            chunks.insert(c, Chunk::new(device, c, lod));
+                            chunks.insert(c, Chunk::new(c, lod));
                         });
                     }
                 }
@@ -49,7 +47,7 @@ impl World {
 }
 
 impl Chunk {
-    pub fn new(device: &wgpu::Device, translation: Vector3<isize>, lod: usize) -> Self {
+    pub fn new(translation: Vector3<isize>, lod: usize) -> Self {
         use noise::{Fbm, Perlin, Turbulence};
         let mut noise = Fbm::<Perlin>::new(0);
         noise.frequency = 0.01;
@@ -105,7 +103,7 @@ impl Chunk {
             }
         });
 
-        let field: Field<bool, 3> =
+        let mask: Field<bool, 3> =
             Field::new(extent, |[x, y, z]| sediments[[x, y, z]] != Sediment::Air);
 
         let color = sediments.map(|s| match s {
@@ -114,19 +112,6 @@ impl Chunk {
             Sediment::Air => rgb(0, 0, 0),
         });
 
-        let env = field.environment();
-
-        Self {
-            mesh: VoxelMesh::new(
-                device,
-                &field.shell(&env),
-                &env.visibility(),
-                &color,
-                N as f32 * translation.cast().unwrap(),
-                scale as f32,
-            ),
-            mask: field,
-            color,
-        }
+        Self { mask, color }
     }
 }

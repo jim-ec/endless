@@ -12,7 +12,10 @@ use crate::{
     world::{Chunk, N},
 };
 
-use self::{gizmos::Gizmos, voxels::VoxelPipeline};
+use self::{
+    gizmos::Gizmos,
+    voxels::{VoxelMesh, VoxelPipeline},
+};
 
 pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth24Plus;
 
@@ -25,6 +28,7 @@ pub struct Renderer {
     camera_symmetry: Symmetry,
     gizmos: Gizmos,
     voxel_pipeline: VoxelPipeline,
+    chunk_meshes: HashMap<Vector3<isize>, VoxelMesh>,
 }
 
 impl Renderer {
@@ -90,6 +94,7 @@ impl Renderer {
             config,
             depth_texture,
             camera_symmetry: camera::Camera::initial().symmetry(),
+            chunk_meshes: HashMap::new(),
         }
     }
 
@@ -169,9 +174,23 @@ impl Renderer {
         }
 
         for (index, chunk) in chunks {
+            let mesh = self.chunk_meshes.entry(*index).or_insert_with(|| {
+                let env = chunk.mask.environment();
+                let shell = chunk.mask.shell(&env);
+                let vis = env.visibility();
+                VoxelMesh::new(
+                    &self.device,
+                    &shell,
+                    &vis,
+                    &chunk.color,
+                    N as f32 * index.cast().unwrap(),
+                    N as f32 / chunk.mask.extent() as f32,
+                )
+            });
+
             self.voxel_pipeline.prepare(
                 &self.queue,
-                &chunk.mesh,
+                mesh,
                 self.camera_symmetry,
                 proj,
                 camera.translation,
@@ -199,7 +218,7 @@ impl Renderer {
                 ..Default::default()
             });
 
-            self.voxel_pipeline.render(&mut render_pass, &chunk.mesh);
+            self.voxel_pipeline.render(&mut render_pass, mesh);
 
             drop(render_pass);
             self.queue.submit([command_encoder.finish()]);
