@@ -44,14 +44,6 @@ async fn run() {
     let mut shift_down = false;
     let mut alt_down = false;
 
-    let mut egui_renderer = egui_wgpu::Renderer::new(
-        &renderer.device,
-        renderer.config.format,
-        Some(renderer::DEPTH_FORMAT),
-        1,
-    );
-
-    let ctx = egui::Context::default();
     let mut events = vec![];
 
     event_loop.run(move |event, _, control_flow| match event {
@@ -182,7 +174,7 @@ async fn run() {
                 ..Default::default()
             };
 
-            let output: egui::FullOutput = ctx.run(input, |ctx| {
+            let ui_output = renderer.ctx().run(input, |ctx| {
                 egui::Window::new("")
                     .title_bar(false)
                     .resizable(false)
@@ -196,7 +188,7 @@ async fn run() {
                     });
             });
 
-            window.set_cursor_icon(match output.platform_output.cursor_icon {
+            window.set_cursor_icon(match ui_output.platform_output.cursor_icon {
                 egui::CursorIcon::Default => winit::window::CursorIcon::Default,
                 egui::CursorIcon::None => winit::window::CursorIcon::Default,
                 egui::CursorIcon::ContextMenu => winit::window::CursorIcon::ContextMenu,
@@ -234,20 +226,10 @@ async fn run() {
                 egui::CursorIcon::ZoomOut => winit::window::CursorIcon::ZoomOut,
             });
 
-            for (id, delta) in &output.textures_delta.set {
-                egui_renderer.update_texture(&renderer.device, &renderer.queue, *id, delta);
-            }
-            for id in &output.textures_delta.free {
-                egui_renderer.free_texture(id);
-            }
-
-            let tris = ctx.tessellate(output.shapes);
-
             match renderer.render(
                 camera,
+                ui_output,
                 &world.chunks,
-                &mut egui_renderer,
-                &tris,
                 window.scale_factor() as f32,
             ) {
                 Ok(_) => {}

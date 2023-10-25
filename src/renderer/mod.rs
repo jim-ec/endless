@@ -24,6 +24,8 @@ pub struct Renderer {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
+    ui_renderer: egui_wgpu::Renderer,
+    ui_ctx: egui::Context,
     depth_texture: wgpu::Texture,
     camera_symmetry: Symmetry,
     gizmos: Gizmos,
@@ -86,6 +88,8 @@ impl Renderer {
         );
 
         Self {
+            ui_renderer: egui_wgpu::Renderer::new(&device, config.format, Some(DEPTH_FORMAT), 1),
+            ui_ctx: egui::Context::default(),
             gizmos: Gizmos::new(&device, config.format, DEPTH_FORMAT),
             voxel_pipeline: VoxelPipeline::new(&device, config.format, DEPTH_FORMAT),
             surface,
@@ -124,13 +128,16 @@ impl Renderer {
         );
     }
 
+    pub fn ctx(&self) -> &egui::Context {
+        &self.ui_ctx
+    }
+
     pub fn render(
         &mut self,
         camera: camera::Camera,
+        ui_output: egui::FullOutput,
         chunks: &HashMap<Vector3<isize>, Chunk>,
-        egui_renderer: &mut egui_wgpu::Renderer,
-        egui_mesh: &[egui::ClippedPrimitive],
-        dpi: f32,
+        scale_factor: f32,
     ) -> Result<(), wgpu::SurfaceError> {
         let surface_texture = self.surface.get_current_texture()?;
         let view = surface_texture
@@ -144,6 +151,7 @@ impl Renderer {
         self.camera_symmetry = self.camera_symmetry.interpolate(&camera.symmetry(), 0.4);
         let proj = camera.proj_matrix(self.config.width as f32 / self.config.height as f32);
 
+        // Clear
         {
             let mut command_encoder = self.device.create_command_encoder(&Default::default());
             command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -173,6 +181,7 @@ impl Renderer {
             self.queue.submit([command_encoder.finish()]);
         }
 
+        // Chunks
         for (index, chunk) in chunks {
             let mesh = self.chunk_meshes.entry(*index).or_insert_with(|| {
                 let env = chunk.mask.environment();
@@ -229,6 +238,7 @@ impl Renderer {
             );
         }
 
+        // Gizmos
         {
             self.gizmos.prepare(&self.queue, self.camera_symmetry, proj);
 
@@ -260,17 +270,28 @@ impl Renderer {
             self.queue.submit([command_encoder.finish()]);
         }
 
+        // UI
         {
+            for (id, delta) in &ui_output.textures_delta.set {
+                self.ui_renderer
+                    .update_texture(&self.device, &self.queue, *id, delta);
+            }
+            for id in &ui_output.textures_delta.free {
+                self.ui_renderer.free_texture(id);
+            }
+
+            let triangles = self.ui_ctx.tessellate(ui_output.shapes);
+
             let mut command_encoder = self.device.create_command_encoder(&Default::default());
 
-            egui_renderer.update_buffers(
+            self.ui_renderer.update_buffers(
                 &self.device,
                 &self.queue,
                 &mut command_encoder,
-                egui_mesh,
+                &triangles,
                 &egui_wgpu::renderer::ScreenDescriptor {
                     size_in_pixels: [self.config.width, self.config.height],
-                    pixels_per_point: dpi,
+                    pixels_per_point: scale_factor,
                 },
             );
 
@@ -294,12 +315,12 @@ impl Renderer {
                 ..Default::default()
             });
 
-            egui_renderer.render(
+            self.ui_renderer.render(
                 &mut render_pass,
-                egui_mesh,
+                &triangles,
                 &egui_wgpu::renderer::ScreenDescriptor {
                     size_in_pixels: [self.config.width, self.config.height],
-                    pixels_per_point: dpi,
+                    pixels_per_point: scale_factor,
                 },
             );
             drop(render_pass);
