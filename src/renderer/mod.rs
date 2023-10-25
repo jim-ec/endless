@@ -6,7 +6,11 @@ use std::collections::HashMap;
 use cgmath::{vec3, Vector3};
 use winit::window::Window;
 
-use crate::world::{Chunk, N};
+use crate::{
+    camera,
+    symmetry::Symmetry,
+    world::{Chunk, N},
+};
 
 use self::{gizmos::Gizmos, voxels::VoxelPipeline};
 
@@ -18,8 +22,9 @@ pub struct Renderer {
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
     depth_texture: wgpu::Texture,
-    pub gizmos: Gizmos,                // TODO: Private
-    pub voxel_pipeline: VoxelPipeline, // TODO: Private
+    camera_symmetry: Symmetry,
+    gizmos: Gizmos,
+    voxel_pipeline: VoxelPipeline,
 }
 
 impl Renderer {
@@ -84,6 +89,7 @@ impl Renderer {
             queue,
             config,
             depth_texture,
+            camera_symmetry: camera::Camera::initial().symmetry(),
         }
     }
 
@@ -115,6 +121,7 @@ impl Renderer {
 
     pub fn render(
         &mut self,
+        camera: camera::Camera,
         chunks: &HashMap<Vector3<isize>, Chunk>,
         egui_renderer: &mut egui_wgpu::Renderer,
         egui_mesh: &[egui::ClippedPrimitive],
@@ -128,6 +135,9 @@ impl Renderer {
         let depth_texture_view = self.depth_texture.create_view(&Default::default());
 
         self.gizmos.clear();
+
+        self.camera_symmetry = self.camera_symmetry.interpolate(&camera.symmetry(), 0.4);
+        let proj = camera.proj_matrix(self.config.width as f32 / self.config.height as f32);
 
         {
             let mut command_encoder = self.device.create_command_encoder(&Default::default());
@@ -159,8 +169,13 @@ impl Renderer {
         }
 
         for (index, chunk) in chunks {
-            self.voxel_pipeline
-                .prepare(&self.queue, &self.config, &chunk.mesh);
+            self.voxel_pipeline.prepare(
+                &self.queue,
+                &chunk.mesh,
+                self.camera_symmetry,
+                proj,
+                camera.translation,
+            );
 
             let mut command_encoder = self.device.create_command_encoder(&Default::default());
 
@@ -187,7 +202,6 @@ impl Renderer {
             self.voxel_pipeline.render(&mut render_pass, &chunk.mesh);
 
             drop(render_pass);
-            // command_buffers.push(command_encoder.finish());
             self.queue.submit([command_encoder.finish()]);
 
             self.gizmos.aabb(
@@ -197,7 +211,7 @@ impl Renderer {
         }
 
         {
-            self.gizmos.prepare(&self.queue, &self.config);
+            self.gizmos.prepare(&self.queue, self.camera_symmetry, proj);
 
             let mut command_encoder = self.device.create_command_encoder(&Default::default());
 

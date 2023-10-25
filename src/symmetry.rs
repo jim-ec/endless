@@ -1,4 +1,4 @@
-use cgmath::{Matrix4, Quaternion, Vector3, Zero};
+use cgmath::{Matrix4, Quaternion, Vector3, VectorSpace, Zero};
 use derive_setters::Setters;
 
 /// A conformal symmetry.
@@ -39,6 +39,15 @@ impl Symmetry {
             translation: inverse_translation,
             rotation: inverse_rotation,
             scale: inverse_scale,
+        }
+    }
+
+    pub fn interpolate(&self, other: &Self, t: f32) -> Self {
+        Symmetry {
+            translation: self.translation.lerp(other.translation, t),
+            rotation: self.rotation.slerp(other.rotation, t),
+            // scale: self.scale + (other.scale - self.scale) * t,
+            scale: 1.0,
         }
     }
 }

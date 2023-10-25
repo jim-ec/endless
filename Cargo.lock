@@ -483,7 +483,6 @@ dependencies = [
  "egui-wgpu",
  "env_logger",
  "itertools",
- "lerp",
  "memoffset 0.9.0",
  "noise",
  "pollster",
@@ -824,27 +823,6 @@ name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
-
-[[package]]
-name = "lerp"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ecc56a024593ecbcacb6bb4f8f4ace719eb08ae9b701535640ef3efb0e706260"
-dependencies = [
- "lerp_derive",
- "num-traits",
-]
-
-[[package]]
-name = "lerp_derive"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36cd57b70ff225446222bf104d80f6d43d2bdca0f2f31171d6cf17148bce0171"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
 
 [[package]]
 name = "libc"

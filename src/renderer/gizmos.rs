@@ -1,6 +1,6 @@
 use cgmath::{Matrix4, Vector3};
 
-use crate::{camera, util};
+use crate::{symmetry::Symmetry, util};
 
 pub struct Gizmos {
     gizmos: Vec<Gizmo>,
@@ -8,7 +8,6 @@ pub struct Gizmos {
     pipeline: wgpu::RenderPipeline,
     uniform_bind_group: wgpu::BindGroup,
     uniform_buffer: wgpu::Buffer,
-    pub camera: camera::Camera,
 }
 
 #[repr(C)]
@@ -16,7 +15,6 @@ pub struct Gizmos {
 pub struct Uniforms {
     pub view: Matrix4<f32>,
     pub proj: Matrix4<f32>,
-    pub camera_translation: Vector3<f32>,
 }
 
 unsafe impl bytemuck::Pod for Uniforms {}
@@ -139,7 +137,6 @@ impl Gizmos {
             pipeline,
             uniform_bind_group,
             uniform_buffer,
-            camera: camera::Camera::initial(),
         }
     }
 
@@ -188,16 +185,13 @@ impl Gizmos {
         self.gizmos.clear();
     }
 
-    pub fn prepare(&self, queue: &wgpu::Queue, config: &wgpu::SurfaceConfiguration) {
+    pub fn prepare(&self, queue: &wgpu::Queue, camera: Symmetry, proj: Matrix4<f32>) {
         queue.write_buffer(
             &self.uniform_buffer,
             0,
             bytemuck::cast_slice(&[Uniforms {
-                view: self.camera.view_matrix(),
-                proj: self
-                    .camera
-                    .proj_matrix(config.width as f32 / config.height as f32),
-                camera_translation: self.camera.translation,
+                view: camera.matrix(),
+                proj,
             }]),
         );
         queue.write_buffer(

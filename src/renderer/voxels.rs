@@ -1,5 +1,4 @@
 use crate::{
-    camera,
     field::{Field, Vis},
     symmetry::Symmetry,
     util,
@@ -11,7 +10,6 @@ pub struct VoxelPipeline {
     pipeline: wgpu::RenderPipeline,
     uniform_bind_group: wgpu::BindGroup,
     uniform_buffer: wgpu::Buffer,
-    pub camera: camera::Camera,
 }
 
 #[repr(C)]
@@ -20,7 +18,7 @@ pub struct Uniforms {
     pub model: Matrix4<f32>,
     pub view: Matrix4<f32>,
     pub proj: Matrix4<f32>,
-    pub camera_translation: Vector3<f32>,
+    pub light: Vector3<f32>,
 }
 
 unsafe impl bytemuck::Pod for Uniforms {}
@@ -153,26 +151,25 @@ impl VoxelPipeline {
             pipeline,
             uniform_buffer,
             uniform_bind_group,
-            camera: camera::Camera::initial(),
         }
     }
 
     pub fn prepare(
         &self,
         queue: &wgpu::Queue,
-        config: &wgpu::SurfaceConfiguration,
         mesh: &VoxelMesh,
+        camera: Symmetry,
+        proj: Matrix4<f32>,
+        light: Vector3<f32>,
     ) {
         queue.write_buffer(
             &self.uniform_buffer,
             0,
             bytemuck::cast_slice(&[Uniforms {
                 model: mesh.symmetry.matrix(),
-                view: self.camera.view_matrix(),
-                proj: self
-                    .camera
-                    .proj_matrix(config.width as f32 / config.height as f32),
-                camera_translation: self.camera.translation,
+                view: camera.matrix(),
+                proj,
+                light,
             }]),
         );
     }

@@ -9,7 +9,6 @@ wgpu = "0.17.1"
 env_logger = "0.9"
 bytemuck = { version = "1.10.0", features = ["derive"] }
 cgmath = "0.18"
-lerp = { version = "0.5.0", features = ["derive"] }
 rand = "0.8.5"
 noise = "0.8.2"
 winit = "0.28.7"

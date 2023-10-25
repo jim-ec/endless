@@ -8,7 +8,6 @@ mod util;
 mod world;
 
 use cgmath::{InnerSpace, Vector3};
-use lerp::Lerp;
 use pollster::FutureExt;
 use std::time::{Duration, Instant};
 use winit::{
@@ -98,8 +97,8 @@ async fn run() {
                 delta: MouseScrollDelta::PixelDelta(delta),
                 ..
             } => {
-                camera.yaw += camera.fovy * camera.up().z.signum() * 0.00008 * delta.x as f32;
-                camera.pitch += camera.fovy * 0.00008 * delta.y as f32;
+                camera.yaw += camera.fovy * camera.up().z.signum() * 0.00008 * -delta.x as f32;
+                camera.pitch += camera.fovy * 0.00008 * -delta.y as f32;
             }
 
             WindowEvent::CursorMoved { position, .. } => {
@@ -173,9 +172,6 @@ async fn run() {
                 camera.translation += FRAME_TIME * speed * translation.normalize_to(1.0);
             }
 
-            renderer.voxel_pipeline.camera.lerp_to(camera, 0.5);
-            renderer.gizmos.camera.lerp_to(camera, 0.5);
-
             let input = egui::RawInput {
                 screen_rect: Some(egui::Rect::from_min_size(
                     egui::Pos2::ZERO,
@@ -248,6 +244,7 @@ async fn run() {
             let tris = ctx.tessellate(output.shapes);
 
             match renderer.render(
+                camera,
                 &world.chunks,
                 &mut egui_renderer,
                 &tris,
