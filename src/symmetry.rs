@@ -46,8 +46,7 @@ impl Symmetry {
         Symmetry {
             translation: self.translation.lerp(other.translation, t),
             rotation: self.rotation.slerp(other.rotation, t),
-            // scale: self.scale + (other.scale - self.scale) * t,
-            scale: 1.0,
+            scale: self.scale + (other.scale - self.scale) * t,
         }
     }
 }

@@ -148,7 +148,11 @@ impl Renderer {
 
         self.gizmos.clear();
 
-        self.camera_symmetry = self.camera_symmetry.interpolate(&camera.symmetry(), 0.4);
+        self.camera_symmetry = self
+            .camera_symmetry
+            .inverse()
+            .interpolate(&camera.symmetry().inverse(), 0.4)
+            .inverse();
         let proj = camera.proj_matrix(self.config.width as f32 / self.config.height as f32);
 
         // Clear
