@@ -34,7 +34,7 @@ pub struct VoxelMesh {
 struct Vertex {
     position: Vector3<f32>,
     normal: Vector3<f32>,
-    color: Vector3<f32>,
+    color: u32,
 }
 
 impl VoxelPipeline {
@@ -113,7 +113,7 @@ impl VoxelPipeline {
                         wgpu::VertexAttribute {
                             offset: memoffset::offset_of!(Vertex, color) as wgpu::BufferAddress,
                             shader_location: 2,
-                            format: wgpu::VertexFormat::Float32x3,
+                            format: wgpu::VertexFormat::Uint32,
                         },
                     ],
                 }],
@@ -228,6 +228,9 @@ impl VoxelMesh {
                         ];
                         let normal = (vs[2] - vs[0]).cross(vs[1] - vs[0]).normalize();
                         let color = color[[x, y, z]];
+                        let color = ((color.x * 255.0) as u32) << 16
+                            | ((color.y * 255.0) as u32) << 8
+                            | ((color.z * 255.0) as u32);
                         vertices.extend(vs.into_iter().map(|v| Vertex {
                             position: position + v,
                             normal,

@@ -10,7 +10,7 @@ struct Uniforms {
 struct In {
     @location(0) position: vec3<f32>,
     @location(1) normal: vec3<f32>,
-    @location(2) color: vec3<f32>,
+    @location(2) color: u32,
 }
 
 struct Out {
@@ -27,7 +27,7 @@ fn vertex(in: In) -> Out {
     out.clip_position = uniforms.proj * uniforms.view * uniforms.model * hom(in.position);
     out.position = dehom(uniforms.model * hom(in.position));
 
-    out.color = clamp(in.color, vec3(0.0), vec3(1.0));
+    out.color = unpack(in.color);
 
     out.normal = in.normal;
 
