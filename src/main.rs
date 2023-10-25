@@ -9,6 +9,8 @@ mod world;
 
 use cgmath::{vec3, InnerSpace, Vector3};
 use pollster::FutureExt;
+use std::sync::mpsc;
+use std::thread;
 use std::{
     collections::HashSet,
     time::{Duration, Instant},
@@ -18,7 +20,7 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
-use world::N;
+use world::{Chunk, N};
 
 pub const FRAME_TIME: f32 = 1.0 / 60.0;
 
@@ -38,7 +40,6 @@ async fn run() {
         .unwrap();
 
     let mut renderer = renderer::Renderer::new(&window).await;
-    let mut world = world::World::default();
 
     let mut camera = camera::Camera::initial();
     let mut w_down = false;
@@ -49,6 +50,21 @@ async fn run() {
     let mut alt_down = false;
 
     let mut events = vec![];
+
+    let (task_sender, task_receiver) = mpsc::channel::<(Vector3<isize>, usize)>();
+    let (chunk_sender, chunk_receiver) = mpsc::channel::<(Vector3<isize>, Chunk)>();
+    let mut world = world::World::default();
+    let mut ordered_chunks = HashSet::<(Vector3<isize>, usize)>::new();
+
+    {
+        let device = renderer.device.clone();
+        thread::spawn(move || {
+            while let Ok((key, lod)) = task_receiver.recv() {
+                let chunk = world::Chunk::new(key, lod, &device);
+                chunk_sender.send((key, chunk)).unwrap();
+            }
+        });
+    }
 
     event_loop.run(move |event, _, control_flow| match event {
         Event::NewEvents(winit::event::StartCause::Init) => {
@@ -236,7 +252,7 @@ async fn run() {
                 .unwrap();
 
             let lod_shift = 1;
-            let radius = 4;
+            let radius = 2;
 
             let mut required_chunks = HashSet::new();
             for x in -radius..=radius {
@@ -260,11 +276,30 @@ async fn run() {
                 exists
             });
 
+            // required_chunks.iter().sorted_by_key(|(key, lod)| {});
+            // for required_chunk in required_chunks {
+            //     let (key, lod) = required_chunk;
+            //     world
+            //         .chunks
+            //         .insert(key, world::Chunk::new(key, lod, &renderer.device));
+            // }
             for required_chunk in required_chunks {
-                let (key, lod) = required_chunk;
-                world
-                    .chunks
-                    .insert(key, world::Chunk::new(key, lod, &renderer.device));
+                if !ordered_chunks.contains(&required_chunk) {
+                    task_sender.send(required_chunk).unwrap();
+                    ordered_chunks.insert(required_chunk);
+                }
+            }
+            while let Ok((key, chunk)) = chunk_receiver.try_recv() {
+                ordered_chunks.remove(&(key, chunk.lod));
+                world.chunks.insert(
+                    key,
+                    world::Chunk {
+                        lod: chunk.lod,
+                        mask: chunk.mask,
+                        color: chunk.color,
+                        voxel_mesh: chunk.voxel_mesh,
+                    },
+                );
             }
 
             match renderer.render(

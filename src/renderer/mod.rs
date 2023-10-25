@@ -1,7 +1,7 @@
 pub mod gizmos;
 pub mod voxels;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use cgmath::{vec3, Vector3};
 use winit::window::Window;
@@ -21,7 +21,7 @@ pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth24Plus;
 
 pub struct Renderer {
     surface: wgpu::Surface,
-    pub device: wgpu::Device,
+    pub device: Arc<wgpu::Device>,
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
     ui_renderer: egui_wgpu::Renderer,
@@ -93,7 +93,7 @@ impl Renderer {
             gizmos: Gizmos::new(&device, config.format, DEPTH_FORMAT),
             voxel_pipeline: VoxelPipeline::new(&device, config.format, DEPTH_FORMAT),
             surface,
-            device,
+            device: Arc::new(device),
             queue,
             config,
             depth_texture,
@@ -254,7 +254,7 @@ impl Renderer {
             self.gizmos.render(&mut render_pass);
 
             drop(render_pass);
-            self.queue.submit([command_encoder.finish()]);
+            // self.queue.submit([command_encoder.finish()]);
         }
 
         // UI
