@@ -23,7 +23,7 @@ const Y_UP: Matrix4<f32> = Matrix4::from_cols(
 impl Camera {
     pub fn initial() -> Self {
         Self {
-            translation: Vector3::new(0.0, 0.0, 1.5 * N as f32),
+            translation: Vector3::new(0.5 * N as f32, 0.5 * N as f32, 1.5 * N as f32),
             yaw: 0.4 * TAU,
             pitch: -0.1 * TAU,
             fovy: 60.0,

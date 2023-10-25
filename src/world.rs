@@ -1,53 +1,33 @@
 use std::collections::HashMap;
 
-use cgmath::{vec3, Vector3};
+use cgmath::Vector3;
 use noise::NoiseFn;
 
 use crate::{
     field::Field,
-    util::{profile, rescale, rgb},
+    renderer::voxels::VoxelMesh,
+    util::{rescale, rgb},
 };
 
-pub const N: usize = 64;
+pub const K: usize = 6;
+pub const N: usize = 1 << K;
 
+#[derive(Default)]
 pub struct World {
     pub chunks: HashMap<Vector3<isize>, Chunk>,
 }
 
 pub struct Chunk {
+    pub lod: usize,
     pub mask: Field<bool, 3>,
     pub color: Field<Vector3<f32>, 3>,
-}
-
-impl World {
-    pub fn new() -> World {
-        println!("Voxels: {}x{}x{} = {}", N, N, N, N.pow(3));
-
-        let mut chunks = HashMap::new();
-
-        let n: isize = 2;
-        for x in -n..=n {
-            for y in -n..=n {
-                for z in 0..=1 {
-                    let c = vec3(x, y, z);
-                    let lod = x.unsigned_abs() + y.unsigned_abs();
-                    // let lod = lod >> 2;
-
-                    if (N >> lod) > 0 {
-                        profile(&format!("Chunk ({x:+},{y:+},{:+}) @{lod}", 0), || {
-                            chunks.insert(c, Chunk::new(c, lod));
-                        });
-                    }
-                }
-            }
-        }
-
-        World { chunks }
-    }
+    pub voxel_mesh: VoxelMesh,
 }
 
 impl Chunk {
-    pub fn new(translation: Vector3<isize>, lod: usize) -> Self {
+    pub fn new(key: Vector3<isize>, lod: usize, device: &wgpu::Device) -> Self {
+        println!("Generating chunk ({},{},{}) @{}", key.x, key.y, key.z, lod);
+
         use noise::{Fbm, Perlin, Turbulence};
         let mut noise = Fbm::<Perlin>::new(0);
         noise.frequency = 0.01;
@@ -56,12 +36,7 @@ impl Chunk {
         let extent = N >> lod;
         let scale = 1 << lod;
 
-        let t = N as f64
-            * vec3(
-                translation.x as f64,
-                translation.y as f64,
-                translation.z as f64,
-            );
+        let t = N as f64 * key.cast().unwrap();
 
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         enum Sediment {
@@ -75,7 +50,7 @@ impl Chunk {
                 noise.get([scale as f64 * x as f64 + t.x, scale as f64 * y as f64 + t.y]) as f32;
             n = rescale(n, -1.0..1.0, 0.1..1.0);
             n = n.powf(1.5);
-            n -= translation.z as f32;
+            n -= key.z as f32;
             n * extent as f32
         });
 
@@ -112,6 +87,23 @@ impl Chunk {
             Sediment::Air => rgb(0, 0, 0),
         });
 
-        Self { mask, color }
+        let env = mask.environment();
+        let shell = mask.shell(&env);
+        let vis = env.visibility();
+        let voxel_mesh = VoxelMesh::new(
+            device,
+            &shell,
+            &vis,
+            &color,
+            N as f32 * key.cast().unwrap(),
+            scale as f32,
+        );
+
+        Self {
+            lod,
+            mask,
+            color,
+            voxel_mesh,
+        }
     }
 }

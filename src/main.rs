@@ -7,14 +7,18 @@ mod symmetry;
 mod util;
 mod world;
 
-use cgmath::{InnerSpace, Vector3};
+use cgmath::{vec3, InnerSpace, Vector3};
 use pollster::FutureExt;
-use std::time::{Duration, Instant};
+use std::{
+    collections::HashSet,
+    time::{Duration, Instant},
+};
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
+use world::N;
 
 pub const FRAME_TIME: f32 = 1.0 / 60.0;
 
@@ -34,7 +38,7 @@ async fn run() {
         .unwrap();
 
     let mut renderer = renderer::Renderer::new(&window).await;
-    let world = world::World::new();
+    let mut world = world::World::default();
 
     let mut camera = camera::Camera::initial();
     let mut w_down = false;
@@ -225,6 +229,43 @@ async fn run() {
                 egui::CursorIcon::ZoomIn => winit::window::CursorIcon::ZoomIn,
                 egui::CursorIcon::ZoomOut => winit::window::CursorIcon::ZoomOut,
             });
+
+            let camera_index: Vector3<isize> = (camera.translation / world::N as f32)
+                .map(f32::floor)
+                .cast()
+                .unwrap();
+
+            let lod_shift = 1;
+            let radius = 4;
+
+            let mut required_chunks = HashSet::new();
+            for x in -radius..=radius {
+                for y in -radius..=radius {
+                    for z in 0..=1 {
+                        let c = vec3(camera_index.x + x, camera_index.y + y, z);
+                        let lod = x.unsigned_abs() + y.unsigned_abs();
+                        let lod = lod >> lod_shift;
+                        if (N >> lod) > 0 {
+                            required_chunks.insert((c, lod));
+                        }
+                    }
+                }
+            }
+
+            world.chunks.retain(|&key, chunk| {
+                let exists = required_chunks.contains(&(key, chunk.lod));
+                if exists {
+                    required_chunks.remove(&(key, chunk.lod));
+                }
+                exists
+            });
+
+            for required_chunk in required_chunks {
+                let (key, lod) = required_chunk;
+                world
+                    .chunks
+                    .insert(key, world::Chunk::new(key, lod, &renderer.device));
+            }
 
             match renderer.render(
                 camera,

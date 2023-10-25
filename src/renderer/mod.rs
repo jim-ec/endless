@@ -183,23 +183,9 @@ impl Renderer {
 
         // Chunks
         for (index, chunk) in chunks {
-            let mesh = self.chunk_meshes.entry(*index).or_insert_with(|| {
-                let env = chunk.mask.environment();
-                let shell = chunk.mask.shell(&env);
-                let vis = env.visibility();
-                VoxelMesh::new(
-                    &self.device,
-                    &shell,
-                    &vis,
-                    &chunk.color,
-                    N as f32 * index.cast().unwrap(),
-                    N as f32 / chunk.mask.extent() as f32,
-                )
-            });
-
             self.voxel_pipeline.prepare(
                 &self.queue,
-                mesh,
+                &chunk.voxel_mesh,
                 self.camera_symmetry,
                 proj,
                 camera.translation,
@@ -227,7 +213,8 @@ impl Renderer {
                 ..Default::default()
             });
 
-            self.voxel_pipeline.render(&mut render_pass, mesh);
+            self.voxel_pipeline
+                .render(&mut render_pass, &chunk.voxel_mesh);
 
             drop(render_pass);
             self.queue.submit([command_encoder.finish()]);
