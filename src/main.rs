@@ -9,6 +9,7 @@ mod world;
 
 use cgmath::{vec3, InnerSpace, Vector3};
 use pollster::FutureExt;
+use std::f32::consts::TAU;
 use std::sync::mpsc;
 use std::thread;
 use std::{
@@ -111,6 +112,7 @@ async fn run() {
             } => {
                 camera.yaw += camera.fovy * camera.up().z.signum() * 0.00008 * -delta.x as f32;
                 camera.pitch += camera.fovy * 0.00008 * -delta.y as f32;
+                camera.pitch = camera.pitch.clamp(-0.25 * TAU, 0.25 * TAU);
             }
 
             WindowEvent::CursorMoved { position, .. } => {
