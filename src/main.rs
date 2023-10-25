@@ -34,7 +34,7 @@ async fn run() {
     let window = WindowBuilder::new()
         .with_title("")
         .with_visible(false)
-        .with_maximized(true)
+        // .with_maximized(true)
         .build(&event_loop)
         .unwrap();
 
@@ -274,6 +274,9 @@ async fn run() {
                 Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                 Err(wgpu::SurfaceError::Timeout) | Err(wgpu::SurfaceError::Outdated) => (),
             }
+
+            // TODO: Remove
+            // renderer.render_(|device, queue| {});
         }
 
         Event::MainEventsCleared => {

@@ -21,7 +21,7 @@ struct Out {
 }
 
 @vertex
-fn voxel_vertex(in: In) -> Out {
+fn vertex(in: In) -> Out {
     var out: Out;
 
     out.clip_position = uniforms.proj * uniforms.view * uniforms.model * hom(in.position);
@@ -35,7 +35,7 @@ fn voxel_vertex(in: In) -> Out {
 }
 
 @fragment
-fn voxel_fragment(out: Out) -> @location(0) vec4<f32> {
+fn fragment(out: Out) -> @location(0) vec4<f32> {
     let ambient_light = 0.05;
     let light_intensity = 1.0;
     
@@ -44,22 +44,4 @@ fn voxel_fragment(out: Out) -> @location(0) vec4<f32> {
 
     let color = nov * light_intensity * out.color + ambient_light;
     return vec4(color, 1.0);
-}
-
-@vertex
-fn gizmo_vertex(@location(0) position: vec3<f32>) -> @builtin(position) vec4<f32> {
-    return uniforms.proj * uniforms.view * uniforms.model * hom(position);
-}
-
-@fragment
-fn gizmo_fragment() -> @location(0) vec4<f32> {
-    return vec4(1.0, 1.0, 0.0, 1.0);
-}
-
-fn hom(v: vec3<f32>) -> vec4<f32> {
-    return vec4(v, 1.0);
-}
-
-fn dehom(v: vec4<f32>) -> vec3<f32> {
-    return v.xyz / v.w;
 }

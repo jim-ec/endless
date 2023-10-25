@@ -23,6 +23,19 @@ impl GizmoPass {
             mapped_at_creation: false,
         });
 
+        let shader = renderer
+            .device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: None,
+                source: wgpu::ShaderSource::Wgsl(
+                    concat!(
+                        include_str!("shaders/gizmo.wgsl"),
+                        include_str!("shaders/util.wgsl"),
+                    )
+                    .into(),
+                ),
+            });
+
         let pipeline = renderer
             .device
             .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -34,8 +47,8 @@ impl GizmoPass {
                     },
                 )),
                 vertex: wgpu::VertexState {
-                    module: &renderer.shader,
-                    entry_point: "gizmo_vertex",
+                    module: &shader,
+                    entry_point: "vertex",
                     buffers: &[wgpu::VertexBufferLayout {
                         array_stride: std::mem::size_of::<Vector3<f32>>() as wgpu::BufferAddress,
                         step_mode: wgpu::VertexStepMode::Vertex,
@@ -47,8 +60,8 @@ impl GizmoPass {
                     }],
                 },
                 fragment: Some(wgpu::FragmentState {
-                    module: &renderer.shader,
-                    entry_point: "gizmo_fragment",
+                    module: &shader,
+                    entry_point: "fragment",
                     targets: &[Some(wgpu::ColorTargetState {
                         format: renderer.config.format,
                         blend: Some(wgpu::BlendState::ALPHA_BLENDING),

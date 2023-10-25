@@ -15,7 +15,6 @@ pub struct Renderer {
     pub uniform_bind_group_layout: wgpu::BindGroupLayout,
     uniform_buffer: wgpu::Buffer,
     pub depth_texture: wgpu::Texture,
-    pub shader: wgpu::ShaderModule,
     pub triangle_count: usize,
 }
 
@@ -34,6 +33,10 @@ unsafe impl bytemuck::Zeroable for Uniforms {}
 pub trait RenderPass {
     fn model_matrix(&self) -> Matrix4<f32>;
     fn render<'p: 'r, 'r>(&'p self, queue: &wgpu::Queue, render_pass: &mut wgpu::RenderPass<'r>);
+}
+
+pub trait RenderNode {
+    fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue);
 }
 
 impl Renderer {
@@ -121,15 +124,6 @@ impl Renderer {
             }),
         );
 
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: None,
-            source: wgpu::ShaderSource::Wgsl(
-                std::fs::read_to_string("shaders/shader.wgsl")
-                    .expect("Cannot read shader file")
-                    .into(),
-            ),
-        });
-
         Self {
             surface,
             device,
@@ -140,7 +134,6 @@ impl Renderer {
             uniform_bind_group_layout,
             depth_texture,
             uniform_buffer,
-            shader,
             triangle_count: 0,
         }
     }

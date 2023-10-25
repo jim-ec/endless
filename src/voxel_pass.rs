@@ -27,6 +27,19 @@ pub struct VoxelPass<'a>(pub &'a VoxelPipeline, pub &'a VoxelMesh);
 
 impl VoxelPipeline {
     pub fn new(renderer: &renderer::Renderer) -> Self {
+        let shader = renderer
+            .device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: None,
+                source: wgpu::ShaderSource::Wgsl(
+                    concat!(
+                        include_str!("shaders/voxel.wgsl"),
+                        include_str!("shaders/util.wgsl"),
+                    )
+                    .into(),
+                ),
+            });
+
         let pipeline = renderer
             .device
             .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -38,8 +51,8 @@ impl VoxelPipeline {
                     },
                 )),
                 vertex: wgpu::VertexState {
-                    module: &renderer.shader,
-                    entry_point: "voxel_vertex",
+                    module: &shader,
+                    entry_point: "vertex",
                     buffers: &[wgpu::VertexBufferLayout {
                         array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
                         step_mode: wgpu::VertexStepMode::Vertex,
@@ -65,8 +78,8 @@ impl VoxelPipeline {
                     }],
                 },
                 fragment: Some(wgpu::FragmentState {
-                    module: &renderer.shader,
-                    entry_point: "voxel_fragment",
+                    module: &shader,
+                    entry_point: "fragment",
                     targets: &[Some(wgpu::ColorTargetState {
                         format: renderer.config.format,
                         blend: Some(wgpu::BlendState::REPLACE),

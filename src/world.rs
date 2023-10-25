@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use cgmath::{vec3, Vector3};
+use cgmath::{vec3, Vector3, Zero};
 use noise::NoiseFn;
 
 use crate::{
@@ -48,9 +48,12 @@ impl World {
             }
         }
 
+        let mut gizmo_pass = GizmoPass::new(renderer);
+        gizmo_pass.aabb(Vector3::zero(), Vector3::new(N as f32, N as f32, N as f32));
+
         World {
             voxel_pipeline: VoxelPipeline::new(renderer),
-            gizmo_pass: GizmoPass::new(renderer),
+            gizmo_pass,
             chunks,
         }
     }
