@@ -1,23 +1,17 @@
 use std::collections::HashMap;
 
-use cgmath::{vec3, Vector3, Zero};
+use cgmath::{vec3, Vector3};
 use noise::NoiseFn;
 
 use crate::{
     field::Field,
-    renderer::{
-        gizmos::Gizmos,
-        voxels::{VoxelMesh, VoxelPipeline},
-        Renderer,
-    },
+    renderer::voxels::VoxelMesh,
     util::{profile, rescale, rgb},
 };
 
 pub const N: usize = 64;
 
 pub struct World {
-    pub voxels: VoxelPipeline,
-    pub gizmos: Gizmos,
     pub chunks: HashMap<Vector3<isize>, Chunk>,
 }
 
@@ -28,41 +22,34 @@ pub struct Chunk {
 }
 
 impl World {
-    pub fn new(renderer: &mut Renderer) -> World {
+    pub fn new(device: &wgpu::Device) -> World {
         println!("Voxels: {}x{}x{} = {}", N, N, N, N.pow(3));
 
         let mut chunks = HashMap::new();
 
-        let n: isize = 0;
+        let n: isize = 2;
         for x in -n..=n {
             for y in -n..=n {
-                for z in 0..=0 {
+                for z in 0..=1 {
                     let c = vec3(x, y, z);
                     let lod = x.unsigned_abs() + y.unsigned_abs();
                     // let lod = lod >> 2;
 
                     if (N >> lod) > 0 {
                         profile(&format!("Chunk ({x:+},{y:+},{:+}) @{lod}", 0), || {
-                            chunks.insert(c, Chunk::new(renderer, c, lod));
+                            chunks.insert(c, Chunk::new(device, c, lod));
                         });
                     }
                 }
             }
         }
 
-        let mut gizmo_pass = Gizmos::new(renderer);
-        gizmo_pass.aabb(Vector3::zero(), Vector3::new(N as f32, N as f32, N as f32));
-
-        World {
-            voxels: VoxelPipeline::new(renderer),
-            gizmos: gizmo_pass,
-            chunks,
-        }
+        World { chunks }
     }
 }
 
 impl Chunk {
-    pub fn new(renderer: &mut Renderer, translation: Vector3<isize>, lod: usize) -> Self {
+    pub fn new(device: &wgpu::Device, translation: Vector3<isize>, lod: usize) -> Self {
         use noise::{Fbm, Perlin, Turbulence};
         let mut noise = Fbm::<Perlin>::new(0);
         noise.frequency = 0.01;
@@ -131,7 +118,7 @@ impl Chunk {
 
         Self {
             mesh: VoxelMesh::new(
-                renderer,
+                device,
                 &field.shell(&env),
                 &env.visibility(),
                 &color,

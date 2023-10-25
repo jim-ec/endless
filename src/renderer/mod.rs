@@ -1,7 +1,14 @@
 pub mod gizmos;
 pub mod voxels;
 
+use std::collections::HashMap;
+
+use cgmath::{vec3, Vector3};
 use winit::window::Window;
+
+use crate::world::{Chunk, N};
+
+use self::{gizmos::Gizmos, voxels::VoxelPipeline};
 
 pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth24Plus;
 
@@ -11,13 +18,8 @@ pub struct Renderer {
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
     depth_texture: wgpu::Texture,
-    pub triangle_count: usize,
-}
-
-pub trait RenderJob {
-    fn prepare(&self, queue: &wgpu::Queue, config: &wgpu::SurfaceConfiguration);
-
-    fn render<'p: 'r, 'r>(&'p self, render_pass: &mut wgpu::RenderPass<'r>);
+    pub gizmos: Gizmos,                // TODO: Private
+    pub voxel_pipeline: VoxelPipeline, // TODO: Private
 }
 
 impl Renderer {
@@ -75,12 +77,13 @@ impl Renderer {
         );
 
         Self {
+            gizmos: Gizmos::new(&device, config.format, DEPTH_FORMAT),
+            voxel_pipeline: VoxelPipeline::new(&device, config.format, DEPTH_FORMAT),
             surface,
             device,
             queue,
             config,
             depth_texture,
-            triangle_count: 0,
         }
     }
 
@@ -111,8 +114,8 @@ impl Renderer {
     }
 
     pub fn render(
-        &self,
-        jobs: &[&dyn RenderJob],
+        &mut self,
+        chunks: &HashMap<Vector3<isize>, Chunk>,
         egui_renderer: &mut egui_wgpu::Renderer,
         egui_mesh: &[egui::ClippedPrimitive],
         dpi: f32,
@@ -123,6 +126,8 @@ impl Renderer {
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         let depth_texture_view = self.depth_texture.create_view(&Default::default());
+
+        self.gizmos.clear();
 
         {
             let mut command_encoder = self.device.create_command_encoder(&Default::default());
@@ -153,8 +158,9 @@ impl Renderer {
             self.queue.submit([command_encoder.finish()]);
         }
 
-        for job in jobs {
-            job.prepare(&self.queue, &self.config);
+        for (index, chunk) in chunks {
+            self.voxel_pipeline
+                .prepare(&self.queue, &self.config, &chunk.mesh);
 
             let mut command_encoder = self.device.create_command_encoder(&Default::default());
 
@@ -178,7 +184,44 @@ impl Renderer {
                 ..Default::default()
             });
 
-            job.render(&mut render_pass);
+            self.voxel_pipeline.render(&mut render_pass, &chunk.mesh);
+
+            drop(render_pass);
+            // command_buffers.push(command_encoder.finish());
+            self.queue.submit([command_encoder.finish()]);
+
+            self.gizmos.aabb(
+                N as f32 * index.cast().unwrap(),
+                N as f32 * (index + vec3(1, 1, 1)).cast().unwrap(),
+            );
+        }
+
+        {
+            self.gizmos.prepare(&self.queue, &self.config);
+
+            let mut command_encoder = self.device.create_command_encoder(&Default::default());
+
+            let mut render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &depth_texture_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: true,
+                    }),
+                    stencil_ops: None,
+                }),
+                ..Default::default()
+            });
+
+            self.gizmos.render(&mut render_pass);
 
             drop(render_pass);
             self.queue.submit([command_encoder.finish()]);

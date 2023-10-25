@@ -1,7 +1,6 @@
 use crate::{
     camera,
     field::{Field, Vis},
-    renderer::{self, RenderJob, DEPTH_FORMAT},
     symmetry::Symmetry,
     util,
 };
@@ -40,123 +39,115 @@ struct Vertex {
     color: Vector3<f32>,
 }
 
-pub struct Voxels<'a>(pub &'a VoxelPipeline, pub &'a VoxelMesh);
-
 impl VoxelPipeline {
-    pub fn new(renderer: &renderer::Renderer) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        color_format: wgpu::TextureFormat,
+        depth_format: wgpu::TextureFormat,
+    ) -> Self {
         let uniform_bind_group_layout =
-            renderer
-                .device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: None,
-                    entries: &[wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    }],
-                });
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: None,
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
 
-        let uniform_buffer = renderer.device.create_buffer(&wgpu::BufferDescriptor {
+        let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
             size: util::align(std::mem::size_of::<Uniforms>(), 16) as wgpu::BufferAddress,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        let uniform_bind_group = renderer
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: None,
-                layout: &uniform_bind_group_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: uniform_buffer.as_entire_binding(),
+        let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &uniform_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform_buffer.as_entire_binding(),
+            }],
+        });
+
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: None,
+            source: wgpu::ShaderSource::Wgsl(
+                concat!(
+                    include_str!("shaders/voxel.wgsl"),
+                    include_str!("shaders/util.wgsl"),
+                )
+                .into(),
+            ),
+        });
+
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: None,
+            layout: Some(
+                &device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    bind_group_layouts: &[&uniform_bind_group_layout],
+                    ..Default::default()
+                }),
+            ),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: "vertex",
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &[
+                        wgpu::VertexAttribute {
+                            offset: memoffset::offset_of!(Vertex, position) as wgpu::BufferAddress,
+                            shader_location: 0,
+                            format: wgpu::VertexFormat::Float32x3,
+                        },
+                        wgpu::VertexAttribute {
+                            offset: memoffset::offset_of!(Vertex, normal) as wgpu::BufferAddress,
+                            shader_location: 1,
+                            format: wgpu::VertexFormat::Float32x3,
+                        },
+                        wgpu::VertexAttribute {
+                            offset: memoffset::offset_of!(Vertex, color) as wgpu::BufferAddress,
+                            shader_location: 2,
+                            format: wgpu::VertexFormat::Float32x3,
+                        },
+                    ],
                 }],
-            });
-
-        let shader = renderer
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: None,
-                source: wgpu::ShaderSource::Wgsl(
-                    concat!(
-                        include_str!("shaders/voxel.wgsl"),
-                        include_str!("shaders/util.wgsl"),
-                    )
-                    .into(),
-                ),
-            });
-
-        let pipeline = renderer
-            .device
-            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: None,
-                layout: Some(&renderer.device.create_pipeline_layout(
-                    &wgpu::PipelineLayoutDescriptor {
-                        bind_group_layouts: &[&uniform_bind_group_layout],
-                        ..Default::default()
-                    },
-                )),
-                vertex: wgpu::VertexState {
-                    module: &shader,
-                    entry_point: "vertex",
-                    buffers: &[wgpu::VertexBufferLayout {
-                        array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &[
-                            wgpu::VertexAttribute {
-                                offset: memoffset::offset_of!(Vertex, position)
-                                    as wgpu::BufferAddress,
-                                shader_location: 0,
-                                format: wgpu::VertexFormat::Float32x3,
-                            },
-                            wgpu::VertexAttribute {
-                                offset: memoffset::offset_of!(Vertex, normal)
-                                    as wgpu::BufferAddress,
-                                shader_location: 1,
-                                format: wgpu::VertexFormat::Float32x3,
-                            },
-                            wgpu::VertexAttribute {
-                                offset: memoffset::offset_of!(Vertex, color) as wgpu::BufferAddress,
-                                shader_location: 2,
-                                format: wgpu::VertexFormat::Float32x3,
-                            },
-                        ],
-                    }],
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader,
-                    entry_point: "fragment",
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: renderer.config.format,
-                        blend: Some(wgpu::BlendState::REPLACE),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                }),
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: Some(wgpu::Face::Back),
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    unclipped_depth: false,
-                    conservative: false,
-                },
-                multisample: wgpu::MultisampleState::default(),
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: DEPTH_FORMAT,
-                    depth_write_enabled: true,
-                    depth_compare: wgpu::CompareFunction::LessEqual,
-                    stencil: Default::default(),
-                    bias: Default::default(),
-                }),
-                multiview: None,
-            });
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: "fragment",
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: color_format,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            multisample: wgpu::MultisampleState::default(),
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: depth_format,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::LessEqual,
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
+            multiview: None,
+        });
 
         Self {
             pipeline,
@@ -165,11 +156,42 @@ impl VoxelPipeline {
             camera: camera::Camera::initial(),
         }
     }
+
+    pub fn prepare(
+        &self,
+        queue: &wgpu::Queue,
+        config: &wgpu::SurfaceConfiguration,
+        mesh: &VoxelMesh,
+    ) {
+        queue.write_buffer(
+            &self.uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[Uniforms {
+                model: mesh.symmetry.matrix(),
+                view: self.camera.view_matrix(),
+                proj: self
+                    .camera
+                    .proj_matrix(config.width as f32 / config.height as f32),
+                camera_translation: self.camera.translation,
+            }]),
+        );
+    }
+
+    pub fn render<'a: 'b, 'b>(
+        &'a self,
+        render_pass: &mut wgpu::RenderPass<'b>,
+        mesh: &'b VoxelMesh,
+    ) {
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+        render_pass.set_vertex_buffer(0, mesh.buffer.slice(..));
+        render_pass.draw(0..mesh.count as u32, 0..1);
+    }
 }
 
 impl VoxelMesh {
     pub fn new(
-        renderer: &mut renderer::Renderer,
+        device: &wgpu::Device,
         mask: &Field<bool, 3>,
         vis: &Field<Vis, 3>,
         color: &Field<Vector3<f32>, 3>,
@@ -219,20 +241,16 @@ impl VoxelMesh {
             }
         }
 
-        let buffer = renderer
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: None,
-                contents: unsafe {
-                    std::slice::from_raw_parts(
-                        vertices.as_ptr() as *const u8,
-                        vertices.len() * std::mem::size_of::<Vertex>(),
-                    )
-                },
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-
-        renderer.triangle_count += vertices.len() / 3;
+        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: unsafe {
+                std::slice::from_raw_parts(
+                    vertices.as_ptr() as *const u8,
+                    vertices.len() * std::mem::size_of::<Vertex>(),
+                )
+            },
+            usage: wgpu::BufferUsages::VERTEX,
+        });
 
         Self {
             symmetry: Symmetry {
@@ -263,29 +281,3 @@ const CUBE_FACE_Y_0: [[u16; 3]; 2] = [[4, 0, 1], [4, 1, 5]];
 const CUBE_FACE_Y_1: [[u16; 3]; 2] = [[7, 3, 2], [7, 2, 6]];
 const CUBE_FACE_Z_0: [[u16; 3]; 2] = [[0, 2, 3], [0, 3, 1]];
 const CUBE_FACE_Z_1: [[u16; 3]; 2] = [[4, 5, 7], [4, 7, 6]];
-
-impl<'a> RenderJob for Voxels<'a> {
-    fn prepare(&self, queue: &wgpu::Queue, config: &wgpu::SurfaceConfiguration) {
-        let Voxels(pipeline, mesh) = self;
-        queue.write_buffer(
-            &pipeline.uniform_buffer,
-            0,
-            bytemuck::cast_slice(&[Uniforms {
-                model: mesh.symmetry.matrix(),
-                view: pipeline.camera.view_matrix(),
-                proj: pipeline
-                    .camera
-                    .proj_matrix(config.width as f32 / config.height as f32),
-                camera_translation: pipeline.camera.translation,
-            }]),
-        );
-    }
-
-    fn render<'p: 'r, 'r>(&'p self, render_pass: &mut wgpu::RenderPass<'r>) {
-        let Voxels(pipeline, mesh) = self;
-        render_pass.set_pipeline(&pipeline.pipeline);
-        render_pass.set_bind_group(0, &pipeline.uniform_bind_group, &[]);
-        render_pass.set_vertex_buffer(0, mesh.buffer.slice(..));
-        render_pass.draw(0..mesh.count as u32, 0..1);
-    }
-}

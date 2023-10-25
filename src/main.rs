@@ -10,7 +10,6 @@ mod world;
 use cgmath::{InnerSpace, Vector3};
 use lerp::Lerp;
 use pollster::FutureExt;
-use renderer::{voxels::Voxels, RenderJob};
 use std::time::{Duration, Instant};
 use winit::{
     event::*,
@@ -36,8 +35,7 @@ async fn run() {
         .unwrap();
 
     let mut renderer = renderer::Renderer::new(&window).await;
-    let mut world = util::profile("World generation", || world::World::new(&mut renderer));
-    println!("Triangle count: {}", renderer.triangle_count);
+    let world = util::profile("World generation", || world::World::new(&renderer.device));
 
     let mut camera = camera::Camera::initial();
     let mut w_down = false;
@@ -175,17 +173,8 @@ async fn run() {
                 camera.translation += FRAME_TIME * speed * translation.normalize_to(1.0);
             }
 
-            world.voxels.camera.lerp_to(camera, 0.5);
-            world.gizmos.camera.lerp_to(camera, 0.5);
-
-            let mut jobs: Vec<&dyn RenderJob> = vec![];
-            jobs.push(&world.gizmos);
-            let mut voxel_passes = vec![];
-            jobs.push(&world.gizmos);
-            for chunk in world.chunks.values() {
-                voxel_passes.push(Voxels(&world.voxels, &chunk.mesh));
-            }
-            jobs.extend(voxel_passes.iter().map(|p| p as &dyn RenderJob));
+            renderer.voxel_pipeline.camera.lerp_to(camera, 0.5);
+            renderer.gizmos.camera.lerp_to(camera, 0.5);
 
             let input = egui::RawInput {
                 screen_rect: Some(egui::Rect::from_min_size(
@@ -259,7 +248,7 @@ async fn run() {
             let tris = ctx.tessellate(output.shapes);
 
             match renderer.render(
-                &jobs,
+                &world.chunks,
                 &mut egui_renderer,
                 &tris,
                 window.scale_factor() as f32,
@@ -271,9 +260,6 @@ async fn run() {
                 Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                 Err(wgpu::SurfaceError::Timeout) | Err(wgpu::SurfaceError::Outdated) => (),
             }
-
-            // TODO: Remove
-            // renderer.render_(|device, queue| {});
         }
 
         Event::MainEventsCleared => {
