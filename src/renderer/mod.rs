@@ -17,6 +17,7 @@ pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth24Plus;
 
 pub struct Renderer {
     surface: wgpu::Surface,
+    pub adapter: wgpu::Adapter,
     pub device: Arc<wgpu::Device>,
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
@@ -24,6 +25,7 @@ pub struct Renderer {
     ui_ctx: egui::Context,
     depth_texture: wgpu::Texture,
     camera_symmetry: Symmetry,
+    camera_fovy: f32,
     pub gizmos: Gizmos,
     voxel_pipeline: VoxelPipeline,
     chunk_meshes: HashMap<Vector3<isize>, VoxelMesh>,
@@ -42,9 +44,6 @@ impl Renderer {
             })
             .await
             .expect("No GPU available");
-
-        println!("GPU: {}", adapter.get_info().name);
-        println!("Render Backend: {:?}", adapter.get_info().backend);
 
         let (device, queue) = adapter
             .request_device(
@@ -89,11 +88,13 @@ impl Renderer {
             gizmos: Gizmos::new(&device, config.format, DEPTH_FORMAT),
             voxel_pipeline: VoxelPipeline::new(&device, config.format, DEPTH_FORMAT),
             surface,
+            adapter,
             device: Arc::new(device),
             queue,
             config,
             depth_texture,
             camera_symmetry: camera::Camera::initial().symmetry(),
+            camera_fovy: camera::Camera::initial().fovy,
             chunk_meshes: HashMap::new(),
         }
     }
@@ -147,7 +148,13 @@ impl Renderer {
             .inverse()
             .interpolate(&camera.symmetry().inverse(), 0.4)
             .inverse();
-        let proj = camera.proj_matrix(self.config.width as f32 / self.config.height as f32);
+        self.camera_fovy += 0.4 * (camera.fovy - self.camera_fovy);
+        let proj = camera::perspective_matrix(
+            self.camera_fovy.to_radians(),
+            self.config.width as f32 / self.config.height as f32,
+            0.1,
+            None,
+        );
 
         // Clear
         {

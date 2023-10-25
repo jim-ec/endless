@@ -25,6 +25,8 @@ use winit::{
 };
 use world::{Chunk, N};
 
+use crate::world::K;
+
 pub const FRAME_TIME: f32 = 1.0 / 60.0;
 
 fn main() {
@@ -57,6 +59,8 @@ async fn run() {
 
     let (chunk_sender, chunk_receiver) = mpsc::channel::<(Vector3<isize>, Chunk)>();
     let mut world = world::World::default();
+    let mut generation_radius = 2;
+    let mut lod_shift = 1;
 
     #[derive(Default)]
     struct Tasks {
@@ -263,7 +267,22 @@ async fn run() {
                         #[cfg(not(debug_assertions))]
                         ui.label(egui::RichText::new("Release Build").strong());
 
-                        ui.add(egui::Slider::new(&mut camera.fovy, 1.0..=180.0).text("FoV"));
+                        ui.separator();
+                        
+                        egui::CollapsingHeader::new("Renderer")
+                            .default_open(true)
+                            .show(ui, |ui| {
+                                ui.label(format!("GPU: {}", renderer.adapter.get_info().name));
+                                ui.label(format!(
+                                    "Backend: {:?}",
+                                    renderer.adapter.get_info().backend
+                                ));
+                                ui.label(format!("Swapchain format: {:?}", renderer.config.format));
+                                ui.label(format!(
+                                    "Swapchain present mode: {:?}",
+                                    renderer.config.present_mode
+                                ));
+                            });
 
                         egui::CollapsingHeader::new("Chunks")
                             .default_open(true)
@@ -273,9 +292,22 @@ async fn run() {
                                     tasks.lock().in_progress.len()
                                 ));
                                 ui.label(format!("total: {}", world.chunks.len()));
+                                ui.add(
+                                    egui::Slider::new(&mut generation_radius, 1..=K as isize)
+                                        .text("Generation Radius"),
+                                );
+                                ui.add(
+                                    egui::Slider::new(&mut lod_shift, 0..=4).text("Exp LoD Scale"),
+                                );
                             });
 
-                        ui.separator();
+                        egui::CollapsingHeader::new("Misc")
+                            .default_open(true)
+                            .show(ui, |ui| {
+                                ui.add(
+                                    egui::Slider::new(&mut camera.fovy, 1.0..=180.0).text("FoV"),
+                                );
+                            });
                     });
             });
 
@@ -334,9 +366,6 @@ async fn run() {
                 );
             }
 
-            let lod_shift = 1;
-            let radius = 4;
-
             let mut required_chunks = HashSet::new();
 
             *player_cell.lock() = camera_index;
@@ -344,12 +373,12 @@ async fn run() {
             // Delete chunks that are outside the generation radius
             world.chunks.retain(|&key, _| {
                 let d = (key - camera_index).map(isize::abs);
-                d.x <= radius && d.y <= radius
+                d.x <= generation_radius && d.y <= generation_radius
             });
 
             // Gather all required chunks and their LoDs based on the camera position
-            for x in -radius..=radius {
-                for y in -radius..=radius {
+            for x in -generation_radius..=generation_radius {
+                for y in -generation_radius..=generation_radius {
                     for z in 0..=1 {
                         let c = vec3(camera_index.x + x, camera_index.y + y, z);
                         let lod = x.unsigned_abs().min(y.unsigned_abs());

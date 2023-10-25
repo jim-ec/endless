@@ -75,15 +75,11 @@ impl Camera {
         let pitch = Quaternion::from_angle_y(cgmath::Rad(self.pitch));
         Matrix4::from(pitch * yaw) * Matrix4::from_translation(-self.translation)
     }
-
-    pub fn proj_matrix(&self, aspect: f32) -> Matrix4<f32> {
-        perspective_matrix(f32::to_radians(self.fovy), aspect, 0.1, None) * Y_UP
-    }
 }
 
-fn perspective_matrix(fovy: f32, aspect: f32, near: f32, far: Option<f32>) -> Matrix4<f32> {
+pub fn perspective_matrix(fovy: f32, aspect: f32, near: f32, far: Option<f32>) -> Matrix4<f32> {
     let tan_half_fovy = (0.5 * fovy).tan();
-    if let Some(far) = far {
+    let m = if let Some(far) = far {
         Matrix4::from_cols(
             Vector4::new(1.0 / (aspect * tan_half_fovy), 0.0, 0.0, 0.0),
             Vector4::new(0.0, 1.0 / tan_half_fovy, 0.0, 0.0),
@@ -97,5 +93,6 @@ fn perspective_matrix(fovy: f32, aspect: f32, near: f32, far: Option<f32>) -> Ma
             Vector4::new(0.0, 0.0, -1.0, -1.0),
             Vector4::new(0.0, 0.0, -2.0 * near, 0.0),
         )
-    }
+    };
+    m * Y_UP
 }
