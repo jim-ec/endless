@@ -31,6 +31,11 @@ pub struct Renderer {
     chunk_meshes: HashMap<Vector3<isize>, VoxelMesh>,
 }
 
+#[derive(Default)]
+pub struct RenderStats {
+    pub chunk_count: usize,
+}
+
 impl Renderer {
     pub async fn new(window: &Window) -> Self {
         let size = window.inner_size();
@@ -60,8 +65,6 @@ impl Renderer {
         let config = surface
             .get_default_config(&adapter, size.width, size.height)
             .unwrap();
-        println!("Swapchain format: {:?}", config.format);
-        println!("Swapchain present mode: {:?}", config.present_mode);
 
         surface.configure(&device, &config);
 
@@ -135,13 +138,15 @@ impl Renderer {
         ui_output: egui::FullOutput,
         chunks: &HashMap<Vector3<isize>, Chunk>,
         scale_factor: f32,
-    ) -> Result<(), wgpu::SurfaceError> {
+    ) -> Result<RenderStats, wgpu::SurfaceError> {
         let surface_texture = self.surface.get_current_texture()?;
         let view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         let depth_texture_view = self.depth_texture.create_view(&Default::default());
+
+        let mut stats = RenderStats::default();
 
         self.camera_symmetry = self
             .camera_symmetry
@@ -220,6 +225,8 @@ impl Renderer {
 
             self.voxel_pipeline
                 .render(&mut render_pass, &chunk.voxel_mesh);
+
+            stats.chunk_count += 1;
 
             drop(render_pass);
             self.queue.submit([command_encoder.finish()]);
@@ -318,6 +325,6 @@ impl Renderer {
 
         self.gizmos.clear();
 
-        Ok(())
+        Ok(stats)
     }
 }

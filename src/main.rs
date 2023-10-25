@@ -62,6 +62,8 @@ async fn run() {
     let mut generation_radius = 2;
     let mut lod_shift = 1;
 
+    let mut stats = renderer::RenderStats::default();
+
     #[derive(Default)]
     struct Tasks {
         task_list: HashMap<Vector3<isize>, usize>,
@@ -268,7 +270,7 @@ async fn run() {
                         ui.label(egui::RichText::new("Release Build").strong());
 
                         ui.separator();
-                        
+
                         egui::CollapsingHeader::new("Renderer")
                             .default_open(true)
                             .show(ui, |ui| {
@@ -288,10 +290,11 @@ async fn run() {
                             .default_open(true)
                             .show(ui, |ui| {
                                 ui.label(format!(
-                                    "in progress: {}",
+                                    "In Progress: {}",
                                     tasks.lock().in_progress.len()
                                 ));
-                                ui.label(format!("total: {}", world.chunks.len()));
+                                ui.label(format!("Total: {}", world.chunks.len()));
+                                ui.label(format!("Rendered: {}", stats.chunk_count));
                                 ui.add(
                                     egui::Slider::new(&mut generation_radius, 1..=K as isize)
                                         .text("Generation Radius"),
@@ -431,7 +434,7 @@ async fn run() {
                 &world.chunks,
                 window.scale_factor() as f32,
             ) {
-                Ok(_) => {}
+                Ok(new_stats) => stats = new_stats,
                 Err(wgpu::SurfaceError::Lost) => {
                     renderer.resize(renderer.config.width, renderer.config.height);
                 }
