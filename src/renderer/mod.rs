@@ -150,7 +150,7 @@ impl Renderer {
                     stencil_ops: None,
                 }),
             });
-            self.queue.submit(Some(command_encoder.finish()));
+            self.queue.submit([command_encoder.finish()]);
         }
 
         for job in jobs {
@@ -181,7 +181,7 @@ impl Renderer {
             job.render(&mut render_pass);
 
             drop(render_pass);
-            self.queue.submit(Some(command_encoder.finish()));
+            self.queue.submit([command_encoder.finish()]);
         }
 
         {
@@ -227,7 +227,7 @@ impl Renderer {
                 },
             );
             drop(render_pass);
-            self.queue.submit(Some(command_encoder.finish()));
+            self.queue.submit([command_encoder.finish()]);
         }
 
         surface_texture.present();
