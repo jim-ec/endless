@@ -57,46 +57,66 @@ async fn run() {
 
     let (chunk_sender, chunk_receiver) = mpsc::channel::<(Vector3<isize>, Chunk)>();
     let mut world = world::World::default();
-    let tasks: Arc<Mutex<HashMap<Vector3<isize>, usize>>> = Default::default();
-    let generating_chunks: Arc<Mutex<HashSet<Vector3<isize>>>> = Default::default();
+
+    #[derive(Default)]
+    struct Tasks {
+        task_list: HashMap<Vector3<isize>, usize>,
+        in_progress: HashMap<Vector3<isize>, usize>,
+    }
+    let tasks: Arc<Mutex<Tasks>> = Default::default();
 
     // Spawn chunk worker threads
-    for _ in 0..4 {
+    for _ in 0..8 {
         let device = renderer.device.clone();
         let tasks = tasks.clone();
         let player_cell = player_cell.clone();
         let chunk_sender = chunk_sender.clone();
-        let generating_chunks = generating_chunks.clone();
         thread::spawn(move || loop {
             let (key, lod) = {
-                let tasks = tasks.lock();
+                let mut tasks = tasks.lock();
                 let player_cell = *player_cell.lock();
 
                 // Get next task, order by distance to camera
-                let Some((&key, &lod)) = tasks.iter().min_by_key(|(&key, &lod)| {
-                    let distance = (key - player_cell).magnitude2();
-                    (distance, lod)
-                }) else {
+                let Some((&key, &lod)) = tasks
+                    .task_list
+                    .iter()
+                    .filter(|(key, &lod)| {
+                        if let Some(&in_progress_lod) = tasks.in_progress.get(key) {
+                            lod != in_progress_lod
+                        } else {
+                            true
+                        }
+                    })
+                    .min_by_key(|(&key, &lod)| {
+                        let distance = (key - player_cell).magnitude2();
+                        (distance, lod)
+                    })
+                else {
                     // No task available, sleep for a bit
                     thread::yield_now();
                     continue;
                 };
 
+                tasks.in_progress.insert(key, lod);
                 (key, lod)
             };
 
             // Generate the chunk. This can take a long time.
-            generating_chunks.lock().insert(key);
             let chunk = world::Chunk::new(key, lod, &device);
 
             {
                 // Check if the task is still valid
                 let mut tasks = tasks.lock();
-                if let Some(&new_lod) = tasks.get(&key) {
+                if let Some(&new_lod) = tasks.in_progress.get(&key) {
                     if lod == new_lod {
                         // Worker generated the chunk we wanted
-                        generating_chunks.lock().remove(&key);
-                        tasks.remove(&key);
+                        tasks.in_progress.remove(&key);
+                    }
+                };
+                if let Some(&new_lod) = tasks.task_list.get(&key) {
+                    if lod == new_lod {
+                        // Worker generated the chunk we wanted
+                        tasks.task_list.remove(&key);
                         chunk_sender.send((key, chunk)).unwrap();
                     }
                 };
@@ -244,6 +264,18 @@ async fn run() {
                         ui.label(egui::RichText::new("Release Build").strong());
 
                         ui.add(egui::Slider::new(&mut camera.fovy, 1.0..=180.0).text("FoV"));
+
+                        egui::CollapsingHeader::new("Chunks")
+                            .default_open(true)
+                            .show(ui, |ui| {
+                                ui.label(format!(
+                                    "in progress: {}",
+                                    tasks.lock().in_progress.len()
+                                ));
+                                ui.label(format!("total: {}", world.chunks.len()));
+                            });
+
+                        ui.separator();
                     });
             });
 
@@ -302,7 +334,7 @@ async fn run() {
                 );
             }
 
-            let lod_shift = 2;
+            let lod_shift = 1;
             let radius = 4;
 
             let mut required_chunks = HashSet::new();
@@ -332,9 +364,15 @@ async fn run() {
             // Record new chunk generation tasks
             {
                 let mut tasks = tasks.lock();
+
+                // Cancel outdated tasks which are not yet in progress
+                tasks
+                    .task_list
+                    .retain(|key, lod| required_chunks.contains(&(*key, *lod)));
+
                 for (key, lod) in required_chunks {
                     // Check if the task is already in progress
-                    if let Some(&old_lod) = tasks.get(&key) {
+                    if let Some(&old_lod) = tasks.task_list.get(&key) {
                         if lod == old_lod {
                             continue;
                         }
@@ -347,15 +385,15 @@ async fn run() {
                         }
                     }
 
-                    tasks.insert(key, lod);
+                    tasks.task_list.insert(key, lod);
                 }
-            }
 
-            for key in generating_chunks.lock().iter() {
-                renderer.gizmos.aabb(
-                    N as f32 * key.cast().unwrap(),
-                    N as f32 * (key + vec3(1, 1, 1)).cast().unwrap(),
-                );
+                for key in tasks.in_progress.keys() {
+                    renderer.gizmos.aabb(
+                        N as f32 * key.cast().unwrap(),
+                        N as f32 * (key + vec3(1, 1, 1)).cast().unwrap(),
+                    );
+                }
             }
 
             match renderer.render(
