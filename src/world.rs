@@ -5,17 +5,19 @@ use noise::NoiseFn;
 
 use crate::{
     field::Field,
-    gizmo_pass::GizmoPass,
-    renderer::Renderer,
+    renderer::{
+        gizmos::Gizmos,
+        voxels::{VoxelMesh, VoxelPipeline},
+        Renderer,
+    },
     util::{profile, rescale, rgb},
-    voxel_pass::{VoxelMesh, VoxelPipeline},
 };
 
 pub const N: usize = 64;
 
 pub struct World {
     pub voxel_pipeline: VoxelPipeline,
-    pub gizmo_pass: GizmoPass,
+    pub gizmo_pass: Gizmos,
     pub chunks: HashMap<Vector3<isize>, Chunk>,
 }
 
@@ -48,7 +50,7 @@ impl World {
             }
         }
 
-        let mut gizmo_pass = GizmoPass::new(renderer);
+        let mut gizmo_pass = Gizmos::new(renderer);
         gizmo_pass.aabb(Vector3::zero(), Vector3::new(N as f32, N as f32, N as f32));
 
         World {

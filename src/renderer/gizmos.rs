@@ -2,7 +2,7 @@ use cgmath::{Matrix4, SquareMatrix, Vector3};
 
 use crate::renderer::{RenderPass, Renderer, DEPTH_FORMAT};
 
-pub struct GizmoPass {
+pub struct Gizmos {
     gizmos: Vec<Gizmo>,
     buffer: wgpu::Buffer,
     pipeline: wgpu::RenderPipeline,
@@ -14,7 +14,7 @@ struct Gizmo(Vector3<f32>, Vector3<f32>);
 unsafe impl bytemuck::Pod for Gizmo {}
 unsafe impl bytemuck::Zeroable for Gizmo {}
 
-impl GizmoPass {
+impl Gizmos {
     pub fn new(renderer: &Renderer) -> Self {
         let buffer = renderer.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
@@ -137,7 +137,7 @@ impl GizmoPass {
     }
 }
 
-impl RenderPass for GizmoPass {
+impl RenderPass for Gizmos {
     fn render<'p: 'r, 'r>(&'p self, queue: &wgpu::Queue, render_pass: &mut wgpu::RenderPass<'r>) {
         render_pass.set_pipeline(&self.pipeline);
         render_pass.set_vertex_buffer(0, self.buffer.slice(..));

@@ -23,7 +23,7 @@ struct Vertex {
     color: Vector3<f32>,
 }
 
-pub struct VoxelPass<'a>(pub &'a VoxelPipeline, pub &'a VoxelMesh);
+pub struct Voxels<'a>(pub &'a VoxelPipeline, pub &'a VoxelMesh);
 
 impl VoxelPipeline {
     pub fn new(renderer: &renderer::Renderer) -> Self {
@@ -207,16 +207,16 @@ const CUBE_FACE_Y_1: [[u16; 3]; 2] = [[7, 3, 2], [7, 2, 6]];
 const CUBE_FACE_Z_0: [[u16; 3]; 2] = [[0, 2, 3], [0, 3, 1]];
 const CUBE_FACE_Z_1: [[u16; 3]; 2] = [[4, 5, 7], [4, 7, 6]];
 
-impl<'a> RenderPass for VoxelPass<'a> {
+impl<'a> RenderPass for Voxels<'a> {
     fn render<'p: 'r, 'r>(&'p self, _queue: &wgpu::Queue, render_pass: &mut wgpu::RenderPass<'r>) {
-        let VoxelPass(pipeline, mesh) = self;
+        let Voxels(pipeline, mesh) = self;
         render_pass.set_pipeline(&pipeline.pipeline);
         render_pass.set_vertex_buffer(0, mesh.buffer.slice(..));
         render_pass.draw(0..mesh.count as u32, 0..1);
     }
 
     fn model_matrix(&self) -> Matrix4<f32> {
-        let VoxelPass(_, mesh) = self;
+        let Voxels(_, mesh) = self;
         mesh.symmetry.matrix()
     }
 }

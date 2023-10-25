@@ -2,19 +2,16 @@
 
 mod camera;
 mod field;
-mod gizmo_pass;
 mod renderer;
 mod symmetry;
 mod util;
-mod voxel_pass;
 mod world;
 
 use cgmath::{InnerSpace, Vector3};
 use lerp::Lerp;
 use pollster::FutureExt;
-use renderer::RenderPass;
+use renderer::{voxels::Voxels, RenderPass};
 use std::time::{Duration, Instant};
-use voxel_pass::VoxelPass;
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
@@ -187,7 +184,7 @@ async fn run() {
             let mut voxel_passes = vec![];
             passes.push(&world.gizmo_pass);
             for chunk in world.chunks.values() {
-                voxel_passes.push(VoxelPass(&world.voxel_pipeline, &chunk.mesh));
+                voxel_passes.push(Voxels(&world.voxel_pipeline, &chunk.mesh));
             }
             passes.extend(voxel_passes.iter().map(|p| p as &dyn RenderPass));
 

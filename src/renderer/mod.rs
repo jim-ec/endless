@@ -1,3 +1,6 @@
+pub mod gizmos;
+pub mod voxels;
+
 use cgmath::{Matrix4, SquareMatrix, Vector3};
 use winit::window::Window;
 
