@@ -9,6 +9,7 @@ mod world;
 
 use cgmath::{vec3, InnerSpace, Vector3, Zero};
 use egui::mutex::Mutex;
+use itertools::Itertools;
 use pollster::FutureExt;
 use std::collections::HashMap;
 use std::f32::consts::TAU;
@@ -63,6 +64,10 @@ async fn run() {
     let mut lod_shift = 1;
 
     let mut stats = renderer::RenderStats::default();
+    let mut frame_time_counter = util::Counter::default();
+    // let mut running_fps = Vec::new();
+    // let mut fps = 0.0;
+    // let mut smoothed_fps = f32::NAN;
 
     #[derive(Default)]
     struct Tasks {
@@ -223,6 +228,8 @@ async fn run() {
         },
 
         Event::RedrawRequested(..) => {
+            frame_time_counter.push(last_render_time.elapsed().as_secs_f32());
+
             last_render_time = Instant::now();
 
             let mut translation = Vector3::new(0.0, 0.0, 0.0);
@@ -274,16 +281,74 @@ async fn run() {
                         egui::CollapsingHeader::new("Renderer")
                             .default_open(true)
                             .show(ui, |ui| {
-                                ui.label(format!("GPU: {}", renderer.adapter.get_info().name));
+                                ui.label(format!(
+                                    "Processor: {}",
+                                    renderer.adapter.get_info().name
+                                ));
                                 ui.label(format!(
                                     "Backend: {:?}",
                                     renderer.adapter.get_info().backend
                                 ));
-                                ui.label(format!("Swapchain format: {:?}", renderer.config.format));
+                                ui.label(format!("FPS: {:.0}", 1.0 / frame_time_counter.smoothed));
                                 ui.label(format!(
-                                    "Swapchain present mode: {:?}",
-                                    renderer.config.present_mode
+                                    "Frame Time: {:.2}ms",
+                                    1000.0 * frame_time_counter.smoothed
                                 ));
+
+                                {
+                                    let desired_size = egui::vec2(ui.available_width(), 30.0);
+
+                                    let (rect, _) = ui.allocate_exact_size(
+                                        desired_size,
+                                        egui::Sense::focusable_noninteractive(),
+                                    );
+
+                                    if ui.is_rect_visible(rect) {
+                                        ui.painter().rect(
+                                            rect,
+                                            2.0,
+                                            egui::Color32::from_additive_luminance(40),
+                                            egui::Stroke::new(
+                                                1.0,
+                                                egui::Color32::from_additive_luminance(80),
+                                            ),
+                                        );
+
+                                        for (x, (a, b)) in frame_time_counter
+                                            .measures
+                                            .iter()
+                                            .copied()
+                                            .map(f32::recip)
+                                            .tuple_windows()
+                                            .enumerate()
+                                        {
+                                            let xa = egui::lerp(
+                                                rect.left()..=rect.right(),
+                                                x as f32 / util::MAX_COUNTER_HISTORY as f32,
+                                            );
+                                            let xb = egui::lerp(
+                                                rect.left()..=rect.right(),
+                                                (x + 1) as f32 / util::MAX_COUNTER_HISTORY as f32,
+                                            );
+                                            let ya = rect.bottom() - desired_size.y / 60.0 * a;
+                                            let yb = rect.bottom() - desired_size.y / 60.0 * b;
+                                            ui.painter().line_segment(
+                                                [egui::pos2(xa, ya), egui::pos2(xb, ya)],
+                                                egui::Stroke::new(
+                                                    1.5,
+                                                    egui::Color32::from_additive_luminance(150),
+                                                ),
+                                            );
+                                            ui.painter().line_segment(
+                                                [egui::pos2(xb, ya), egui::pos2(xb, yb)],
+                                                egui::Stroke::new(
+                                                    1.5,
+                                                    egui::Color32::from_additive_luminance(150),
+                                                ),
+                                            );
+                                        }
+                                    }
+                                }
                             });
 
                         egui::CollapsingHeader::new("Chunks")

@@ -33,3 +33,35 @@ pub fn rgb(r: usize, g: usize, b: usize) -> Vector3<f32> {
 pub fn align(x: usize, align: usize) -> usize {
     (x + align - 1) & !(align - 1)
 }
+
+pub struct Counter {
+    pub measures: Vec<f32>,
+    pub smoothed: f32,
+}
+
+impl Default for Counter {
+    fn default() -> Self {
+        Self {
+            measures: Vec::with_capacity(MAX_COUNTER_HISTORY),
+            smoothed: f32::NAN,
+        }
+    }
+}
+
+pub const MAX_COUNTER_HISTORY: usize = 100;
+
+impl Counter {
+    pub fn push(&mut self, measure: f32) {
+        self.measures.push(measure);
+        if self.measures.len() > MAX_COUNTER_HISTORY {
+            self.measures.remove(0);
+        }
+
+        if self.smoothed.is_nan() {
+            self.smoothed = measure;
+        } else {
+            let stiffness = 0.2;
+            self.smoothed = stiffness * measure + (1.0 - stiffness) * self.smoothed;
+        }
+    }
+}
