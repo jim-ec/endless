@@ -1,4 +1,6 @@
 target
 
+flamegraph.svg
+
 .DS_Store
 .desktop.ini
