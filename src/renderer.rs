@@ -143,6 +143,7 @@ impl Renderer {
         ui_output: egui::FullOutput,
         chunks: &HashMap<Vector3<isize>, Chunk>,
         scale_factor: f32,
+        enable_gizmos: bool,
     ) -> Result<RenderStats, wgpu::SurfaceError> {
         let surface_texture = self.surface.get_current_texture()?;
         let view = surface_texture
@@ -251,7 +252,7 @@ impl Renderer {
         }
 
         // Gizmos
-        {
+        if enable_gizmos {
             self.gizmos.prepare(&self.queue, self.camera_symmetry, proj);
 
             let mut command_encoder = self.device.create_command_encoder(&Default::default());

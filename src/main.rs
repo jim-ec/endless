@@ -60,6 +60,7 @@ async fn run() {
     let mut world = world::World::default();
     let mut generation_radius = 7;
     let mut lod_shift = 2;
+    let mut enable_gizmos = false;
 
     let mut stats = renderer::RenderStats::default();
     let mut frame_time_counter = util::Counter::default();
@@ -370,6 +371,7 @@ async fn run() {
                                 ui.add(
                                     egui::Slider::new(&mut camera.fovy, 1.0..=180.0).text("FoV"),
                                 );
+                                ui.checkbox(&mut enable_gizmos, "Gizmos");
                             });
                     });
             });
@@ -493,6 +495,7 @@ async fn run() {
                 ui_output,
                 &world.chunks,
                 window.scale_factor() as f32,
+                enable_gizmos,
             ) {
                 Ok(new_stats) => stats = new_stats,
                 Err(wgpu::SurfaceError::Lost) => {
