@@ -166,6 +166,8 @@ impl Renderer {
             None,
         );
 
+        let mut command_buffers = Vec::new();
+
         // Clear
         {
             let mut command_encoder = self.device.create_command_encoder(&Default::default());
@@ -193,7 +195,7 @@ impl Renderer {
                     stencil_ops: None,
                 }),
             });
-            self.queue.submit([command_encoder.finish()]);
+            command_buffers.push(command_encoder.finish());
         }
 
         // Chunks
@@ -234,43 +236,18 @@ impl Renderer {
                 }
             }
 
-            self.voxel_pipeline.prepare(
+            stats.chunk_count += 1;
+
+            command_buffers.push(self.voxel_pipeline.render(
+                &self.device,
                 &self.queue,
                 &chunk.voxel_mesh,
                 self.camera_symmetry,
                 proj,
                 camera.translation,
-            );
-
-            let mut command_encoder = self.device.create_command_encoder(&Default::default());
-
-            let mut render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: true,
-                    },
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &depth_texture_view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: true,
-                    }),
-                    stencil_ops: None,
-                }),
-                ..Default::default()
-            });
-
-            self.voxel_pipeline
-                .render(&mut render_pass, &chunk.voxel_mesh);
-
-            stats.chunk_count += 1;
-
-            drop(render_pass);
-            self.queue.submit([command_encoder.finish()]);
+                &view,
+                &depth_texture_view,
+            ));
         }
 
         // Gizmos
@@ -302,7 +279,7 @@ impl Renderer {
             self.gizmos.render(&mut render_pass);
 
             drop(render_pass);
-            self.queue.submit([command_encoder.finish()]);
+            command_buffers.push(command_encoder.finish());
         }
 
         // UI
@@ -359,9 +336,10 @@ impl Renderer {
                 },
             );
             drop(render_pass);
-            self.queue.submit([command_encoder.finish()]);
+            command_buffers.push(command_encoder.finish());
         }
 
+        self.queue.submit(command_buffers);
         surface_texture.present();
 
         self.gizmos.clear();

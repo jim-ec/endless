@@ -39,7 +39,7 @@ async fn run() {
     let window = WindowBuilder::new()
         .with_title("")
         .with_visible(false)
-        // .with_maximized(true)
+        .with_maximized(true)
         .build(&event_loop)
         .unwrap();
 
@@ -58,14 +58,11 @@ async fn run() {
 
     let (chunk_sender, chunk_receiver) = mpsc::channel::<(Vector3<isize>, Chunk)>();
     let mut world = world::World::default();
-    let mut generation_radius = 2;
-    let mut lod_shift = 1;
+    let mut generation_radius = 7;
+    let mut lod_shift = 2;
 
     let mut stats = renderer::RenderStats::default();
     let mut frame_time_counter = util::Counter::default();
-    // let mut running_fps = Vec::new();
-    // let mut fps = 0.0;
-    // let mut smoothed_fps = f32::NAN;
 
     #[derive(Default)]
     struct Tasks {

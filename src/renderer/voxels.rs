@@ -8,8 +8,7 @@ use wgpu::util::DeviceExt;
 
 pub struct VoxelPipeline {
     pipeline: wgpu::RenderPipeline,
-    uniform_bind_group: wgpu::BindGroup,
-    uniform_buffer: wgpu::Buffer,
+    bind_group_layout: wgpu::BindGroupLayout,
 }
 
 #[repr(C)]
@@ -29,6 +28,7 @@ pub struct VoxelMesh {
     pub symmetry: Symmetry,
     buffer: wgpu::Buffer,
     count: usize,
+    uniform_buffer: wgpu::Buffer,
 }
 
 struct Vertex {
@@ -43,34 +43,17 @@ impl VoxelPipeline {
         color_format: wgpu::TextureFormat,
         depth_format: wgpu::TextureFormat,
     ) -> Self {
-        let uniform_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: None,
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-            });
-
-        let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: None,
-            size: util::align(std::mem::size_of::<Uniforms>(), 16) as wgpu::BufferAddress,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: &uniform_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
+            entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
-                resource: uniform_buffer.as_entire_binding(),
+                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
             }],
         });
 
@@ -89,7 +72,7 @@ impl VoxelPipeline {
             label: None,
             layout: Some(
                 &device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    bind_group_layouts: &[&uniform_bind_group_layout],
+                    bind_group_layouts: &[&bind_group_layout],
                     ..Default::default()
                 }),
             ),
@@ -149,21 +132,25 @@ impl VoxelPipeline {
 
         Self {
             pipeline,
-            uniform_buffer,
-            uniform_bind_group,
+            bind_group_layout,
         }
     }
 
-    pub fn prepare(
+    // TODO: Somehow refactor this monster function
+    #[allow(clippy::too_many_arguments)]
+    pub fn render(
         &self,
+        device: &wgpu::Device,
         queue: &wgpu::Queue,
         mesh: &VoxelMesh,
         camera: Symmetry,
         proj: Matrix4<f32>,
         light: Vector3<f32>,
-    ) {
+        color: &wgpu::TextureView,
+        depth: &wgpu::TextureView,
+    ) -> wgpu::CommandBuffer {
         queue.write_buffer(
-            &self.uniform_buffer,
+            &mesh.uniform_buffer,
             0,
             bytemuck::cast_slice(&[Uniforms {
                 model: mesh.symmetry.matrix(),
@@ -172,17 +159,45 @@ impl VoxelPipeline {
                 light,
             }]),
         );
-    }
 
-    pub fn render<'a: 'b, 'b>(
-        &'a self,
-        render_pass: &mut wgpu::RenderPass<'b>,
-        mesh: &'b VoxelMesh,
-    ) {
+        let mut command_encoder = device.create_command_encoder(&Default::default());
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &self.bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: mesh.uniform_buffer.as_entire_binding(),
+            }],
+        });
+
+        let mut render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: color,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: true,
+                },
+            })],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: depth,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: true,
+                }),
+                stencil_ops: None,
+            }),
+            ..Default::default()
+        });
+
         render_pass.set_pipeline(&self.pipeline);
-        render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+        render_pass.set_bind_group(0, &bind_group, &[]);
         render_pass.set_vertex_buffer(0, mesh.buffer.slice(..));
         render_pass.draw(0..mesh.count as u32, 0..1);
+
+        drop(render_pass);
+        command_encoder.finish()
     }
 }
 
@@ -252,6 +267,13 @@ impl VoxelMesh {
             usage: wgpu::BufferUsages::VERTEX,
         });
 
+        let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: util::align(std::mem::size_of::<Uniforms>(), 16) as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
         Self {
             symmetry: Symmetry {
                 rotation: Quaternion::new(1.0, 0.0, 0.0, 0.0),
@@ -260,6 +282,7 @@ impl VoxelMesh {
             },
             buffer,
             count: vertices.len(),
+            uniform_buffer,
         }
     }
 }
