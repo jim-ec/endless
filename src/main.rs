@@ -350,6 +350,7 @@ async fn run() {
                         egui::CollapsingHeader::new("Chunks")
                             .default_open(true)
                             .show(ui, |ui| {
+                                ui.label(format!("Side Extent: {N}"));
                                 ui.label(format!(
                                     "In Progress: {}",
                                     tasks.lock().in_progress.len()
