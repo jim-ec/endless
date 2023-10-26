@@ -145,6 +145,8 @@ impl Renderer {
         scale_factor: f32,
         enable_gizmos: bool,
     ) -> Result<RenderStats, wgpu::SurfaceError> {
+        puffin::profile_function!();
+
         let surface_texture = self.surface.get_current_texture()?;
         let view = surface_texture
             .texture
@@ -198,56 +200,60 @@ impl Renderer {
         }
 
         // Chunks
-        for chunk in chunks.values() {
-            // Frustum culling
-            {
-                // Since this is the full model-view-projection matrix, the extracted
-                // planes are in model space.
-                let m = (proj * self.camera_symmetry.matrix() * chunk.voxel_mesh.symmetry.matrix())
-                    .transpose();
+        {
+            puffin::profile_scope!("Render Chunks");
+            for chunk in chunks.values() {
+                // Frustum culling
+                {
+                    // Since this is the full model-view-projection matrix, the extracted
+                    // planes are in model space.
+                    let m =
+                        (proj * self.camera_symmetry.matrix() * chunk.voxel_mesh.symmetry.matrix())
+                            .transpose();
 
-                // We do not test against the far plane because that is handled by the generation radius.
-                let planes = [
-                    m[3] + m[0], // left
-                    m[3] - m[0], // right
-                    m[3] + m[1], // bottom
-                    m[3] - m[1], // top
-                    m[3] + m[2], // near
-                ];
+                    // We do not test against the far plane because that is handled by the generation radius.
+                    let planes = [
+                        m[3] + m[0], // left
+                        m[3] - m[0], // right
+                        m[3] + m[1], // bottom
+                        m[3] - m[1], // top
+                        m[3] + m[2], // near
+                    ];
 
-                // The extent of the unit cube we are testing against
-                let max = N as f32 / chunk.voxel_mesh.symmetry.scale;
+                    // The extent of the unit cube we are testing against
+                    let max = N as f32 / chunk.voxel_mesh.symmetry.scale;
 
-                // A chunk is partially visible if:
-                // ∀ plane ∈ planes: ∃ vertex ∈ chunk: dist(plane, vertex) > 0
-                // Applying De Morgan's law:
-                // ¬(∀ plane ∈ planes: ∃ vertex ∈ chunk: dist(plane, vertex) > 0)
-                // = ∃ plane ∈ planes: ¬(∃ vertex ∈ chunk: dist(plane, vertex) > 0)
-                // = ∃ plane ∈ planes: ∀ vertex ∈ chunk: dist(plane, vertex) ≤ 0
-                if planes.into_iter().any(|plane| {
-                    [0.0, max]
-                        .into_iter()
-                        .cartesian_product([0.0, max])
-                        .cartesian_product([0.0, max])
-                        .all(|((x, y), z)| plane.dot(vec4(x, y, z, 1.0)) <= 0.0)
-                }) {
-                    continue;
+                    // A chunk is partially visible if:
+                    // ∀ plane ∈ planes: ∃ vertex ∈ chunk: dist(plane, vertex) > 0
+                    // Applying De Morgan's law:
+                    // ¬(∀ plane ∈ planes: ∃ vertex ∈ chunk: dist(plane, vertex) > 0)
+                    // = ∃ plane ∈ planes: ¬(∃ vertex ∈ chunk: dist(plane, vertex) > 0)
+                    // = ∃ plane ∈ planes: ∀ vertex ∈ chunk: dist(plane, vertex) ≤ 0
+                    if planes.into_iter().any(|plane| {
+                        [0.0, max]
+                            .into_iter()
+                            .cartesian_product([0.0, max])
+                            .cartesian_product([0.0, max])
+                            .all(|((x, y), z)| plane.dot(vec4(x, y, z, 1.0)) <= 0.0)
+                    }) {
+                        continue;
+                    }
                 }
+
+                stats.chunk_count += 1;
+
+                self.voxel_pipeline.render(
+                    &mut command_encoder,
+                    &self.device,
+                    &self.queue,
+                    &chunk.voxel_mesh,
+                    self.camera_symmetry,
+                    proj,
+                    camera.translation,
+                    &view,
+                    &depth_texture_view,
+                );
             }
-
-            stats.chunk_count += 1;
-
-            self.voxel_pipeline.render(
-                &mut command_encoder,
-                &self.device,
-                &self.queue,
-                &chunk.voxel_mesh,
-                self.camera_symmetry,
-                proj,
-                camera.translation,
-                &view,
-                &depth_texture_view,
-            );
         }
 
         // Gizmos

@@ -18,6 +18,8 @@ bitflags = "2.4.1"
 pollster = "0.3.0"
 egui = "0.23.0"
 egui-wgpu = "0.23.0"
+puffin = "0.17.0"
+puffin_egui = "0.23.0"
 
 [profile.dev]
 debug = true

@@ -34,6 +34,8 @@ fn main() {
 
 async fn run() {
     env_logger::init();
+    puffin::set_scopes_on(true);
+
     let mut last_render_time = Instant::now();
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
@@ -64,6 +66,7 @@ async fn run() {
 
     let mut stats = renderer::RenderStats::default();
     let mut frame_time_counter = util::Counter::default();
+    let mut show_profiler = false;
 
     #[derive(Default)]
     struct Tasks {
@@ -73,62 +76,65 @@ async fn run() {
     let tasks: Arc<Mutex<Tasks>> = Default::default();
 
     // Spawn chunk worker threads
-    for _ in 0..8 {
+    for i in 0..8 {
         let device = renderer.device.clone();
         let tasks = tasks.clone();
         let player_cell = player_cell.clone();
         let chunk_sender = chunk_sender.clone();
-        thread::spawn(move || loop {
-            let (key, lod) = {
-                let mut tasks = tasks.lock();
-                let player_cell = *player_cell.lock();
+        thread::Builder::new()
+            .name(format!("Worker #{i}"))
+            .spawn(move || loop {
+                let (key, lod) = {
+                    let mut tasks = tasks.lock();
+                    let player_cell = *player_cell.lock();
 
-                // Get next task, order by distance to camera
-                let Some((&key, &lod)) = tasks
-                    .task_list
-                    .iter()
-                    .filter(|(key, &lod)| {
-                        if let Some(&in_progress_lod) = tasks.in_progress.get(key) {
-                            lod != in_progress_lod
-                        } else {
-                            true
+                    // Get next task, order by distance to camera
+                    let Some((&key, &lod)) = tasks
+                        .task_list
+                        .iter()
+                        .filter(|(key, &lod)| {
+                            if let Some(&in_progress_lod) = tasks.in_progress.get(key) {
+                                lod != in_progress_lod
+                            } else {
+                                true
+                            }
+                        })
+                        .min_by_key(|(&key, &lod)| {
+                            let distance = (key - player_cell).magnitude2();
+                            (distance, lod)
+                        })
+                    else {
+                        // No task available, sleep for a bit
+                        thread::yield_now();
+                        continue;
+                    };
+
+                    tasks.in_progress.insert(key, lod);
+                    (key, lod)
+                };
+
+                // Generate the chunk. This can take a long time.
+                let chunk = world::Chunk::new(key, lod, &device);
+
+                {
+                    // Check if the task is still valid
+                    let mut tasks = tasks.lock();
+                    if let Some(&new_lod) = tasks.in_progress.get(&key) {
+                        if lod == new_lod {
+                            // Worker generated the chunk we wanted
+                            tasks.in_progress.remove(&key);
                         }
-                    })
-                    .min_by_key(|(&key, &lod)| {
-                        let distance = (key - player_cell).magnitude2();
-                        (distance, lod)
-                    })
-                else {
-                    // No task available, sleep for a bit
-                    thread::yield_now();
-                    continue;
-                };
-
-                tasks.in_progress.insert(key, lod);
-                (key, lod)
-            };
-
-            // Generate the chunk. This can take a long time.
-            let chunk = world::Chunk::new(key, lod, &device);
-
-            {
-                // Check if the task is still valid
-                let mut tasks = tasks.lock();
-                if let Some(&new_lod) = tasks.in_progress.get(&key) {
-                    if lod == new_lod {
-                        // Worker generated the chunk we wanted
-                        tasks.in_progress.remove(&key);
-                    }
-                };
-                if let Some(&new_lod) = tasks.task_list.get(&key) {
-                    if lod == new_lod {
-                        // Worker generated the chunk we wanted
-                        tasks.task_list.remove(&key);
-                        chunk_sender.send((key, chunk)).unwrap();
-                    }
-                };
-            }
-        });
+                    };
+                    if let Some(&new_lod) = tasks.task_list.get(&key) {
+                        if lod == new_lod {
+                            // Worker generated the chunk we wanted
+                            tasks.task_list.remove(&key);
+                            chunk_sender.send((key, chunk)).unwrap();
+                        }
+                    };
+                }
+            })
+            .unwrap();
     }
 
     event_loop.run(move |event, _, control_flow| match event {
@@ -224,6 +230,8 @@ async fn run() {
         },
 
         Event::RedrawRequested(..) => {
+            puffin::GlobalProfiler::lock().new_frame();
+
             frame_time_counter.push(last_render_time.elapsed().as_secs_f32());
 
             last_render_time = Instant::now();
@@ -263,118 +271,113 @@ async fn run() {
             };
 
             let ui_output = renderer.ctx().run(input, |ctx| {
-                egui::Window::new("")
-                    .title_bar(false)
-                    .resizable(false)
-                    .show(ctx, |ui| {
-                        #[cfg(debug_assertions)]
-                        ui.label(egui::RichText::new("Debug Build").strong());
-                        #[cfg(not(debug_assertions))]
-                        ui.label(egui::RichText::new("Release Build").strong());
+                puffin::profile_scope!("UI");
+                egui::Window::new("Inspector").show(ctx, |ui| {
+                    #[cfg(debug_assertions)]
+                    ui.label(egui::RichText::new("Debug Build").strong());
+                    #[cfg(not(debug_assertions))]
+                    ui.label(egui::RichText::new("Release Build").strong());
+                    if show_profiler {
+                        show_profiler = !ui.button("Close Profiler").clicked();
+                    } else {
+                        show_profiler = ui.button("Open Profiler").clicked();
+                    }
 
-                        ui.separator();
+                    egui::CollapsingHeader::new("Renderer")
+                        .default_open(true)
+                        .show(ui, |ui| {
+                            ui.label(format!("Processor: {}", renderer.adapter.get_info().name));
+                            ui.label(format!(
+                                "Backend: {:?}",
+                                renderer.adapter.get_info().backend
+                            ));
+                            ui.label(format!("FPS: {:.0}", 1.0 / frame_time_counter.smoothed));
+                            ui.label(format!(
+                                "Frame Time: {:.2}ms",
+                                1000.0 * frame_time_counter.smoothed
+                            ));
 
-                        egui::CollapsingHeader::new("Renderer")
-                            .default_open(true)
-                            .show(ui, |ui| {
-                                ui.label(format!(
-                                    "Processor: {}",
-                                    renderer.adapter.get_info().name
-                                ));
-                                ui.label(format!(
-                                    "Backend: {:?}",
-                                    renderer.adapter.get_info().backend
-                                ));
-                                ui.label(format!("FPS: {:.0}", 1.0 / frame_time_counter.smoothed));
-                                ui.label(format!(
-                                    "Frame Time: {:.2}ms",
-                                    1000.0 * frame_time_counter.smoothed
-                                ));
+                            {
+                                let desired_size = egui::vec2(ui.available_width(), 30.0);
 
-                                {
-                                    let desired_size = egui::vec2(ui.available_width(), 30.0);
+                                let (rect, _) = ui.allocate_exact_size(
+                                    desired_size,
+                                    egui::Sense::focusable_noninteractive(),
+                                );
 
-                                    let (rect, _) = ui.allocate_exact_size(
-                                        desired_size,
-                                        egui::Sense::focusable_noninteractive(),
+                                if ui.is_rect_visible(rect) {
+                                    ui.painter().rect(
+                                        rect,
+                                        2.0,
+                                        egui::Color32::from_additive_luminance(40),
+                                        egui::Stroke::new(
+                                            1.0,
+                                            egui::Color32::from_additive_luminance(80),
+                                        ),
                                     );
 
-                                    if ui.is_rect_visible(rect) {
-                                        ui.painter().rect(
-                                            rect,
-                                            2.0,
-                                            egui::Color32::from_additive_luminance(40),
+                                    for (x, (a, b)) in frame_time_counter
+                                        .measures
+                                        .iter()
+                                        .copied()
+                                        .map(f32::recip)
+                                        .tuple_windows()
+                                        .enumerate()
+                                    {
+                                        let xa = egui::lerp(
+                                            rect.left()..=rect.right(),
+                                            x as f32 / util::MAX_COUNTER_HISTORY as f32,
+                                        );
+                                        let xb = egui::lerp(
+                                            rect.left()..=rect.right(),
+                                            (x + 1) as f32 / util::MAX_COUNTER_HISTORY as f32,
+                                        );
+                                        let ya = rect.bottom() - desired_size.y / 60.0 * a;
+                                        let yb = rect.bottom() - desired_size.y / 60.0 * b;
+                                        ui.painter().line_segment(
+                                            [egui::pos2(xa, ya), egui::pos2(xb, ya)],
                                             egui::Stroke::new(
-                                                1.0,
-                                                egui::Color32::from_additive_luminance(80),
+                                                1.5,
+                                                egui::Color32::from_additive_luminance(150),
                                             ),
                                         );
-
-                                        for (x, (a, b)) in frame_time_counter
-                                            .measures
-                                            .iter()
-                                            .copied()
-                                            .map(f32::recip)
-                                            .tuple_windows()
-                                            .enumerate()
-                                        {
-                                            let xa = egui::lerp(
-                                                rect.left()..=rect.right(),
-                                                x as f32 / util::MAX_COUNTER_HISTORY as f32,
-                                            );
-                                            let xb = egui::lerp(
-                                                rect.left()..=rect.right(),
-                                                (x + 1) as f32 / util::MAX_COUNTER_HISTORY as f32,
-                                            );
-                                            let ya = rect.bottom() - desired_size.y / 60.0 * a;
-                                            let yb = rect.bottom() - desired_size.y / 60.0 * b;
-                                            ui.painter().line_segment(
-                                                [egui::pos2(xa, ya), egui::pos2(xb, ya)],
-                                                egui::Stroke::new(
-                                                    1.5,
-                                                    egui::Color32::from_additive_luminance(150),
-                                                ),
-                                            );
-                                            ui.painter().line_segment(
-                                                [egui::pos2(xb, ya), egui::pos2(xb, yb)],
-                                                egui::Stroke::new(
-                                                    1.5,
-                                                    egui::Color32::from_additive_luminance(150),
-                                                ),
-                                            );
-                                        }
+                                        ui.painter().line_segment(
+                                            [egui::pos2(xb, ya), egui::pos2(xb, yb)],
+                                            egui::Stroke::new(
+                                                1.5,
+                                                egui::Color32::from_additive_luminance(150),
+                                            ),
+                                        );
                                     }
                                 }
-                            });
+                            }
+                        });
 
-                        egui::CollapsingHeader::new("Chunks")
-                            .default_open(true)
-                            .show(ui, |ui| {
-                                ui.label(format!("Side Extent: {N}"));
-                                ui.label(format!(
-                                    "In Progress: {}",
-                                    tasks.lock().in_progress.len()
-                                ));
-                                ui.label(format!("Total: {}", world.chunks.len()));
-                                ui.label(format!("Rendered: {}", stats.chunk_count));
-                                ui.add(
-                                    egui::Slider::new(&mut generation_radius, 1..=16)
-                                        .text("Generation Radius"),
-                                );
-                                ui.add(
-                                    egui::Slider::new(&mut lod_shift, 0..=4).text("Exp LoD Scale"),
-                                );
-                            });
+                    egui::CollapsingHeader::new("Chunks")
+                        .default_open(true)
+                        .show(ui, |ui| {
+                            ui.label(format!("Side Extent: {N}"));
+                            ui.label(format!("In Progress: {}", tasks.lock().in_progress.len()));
+                            ui.label(format!("Total: {}", world.chunks.len()));
+                            ui.label(format!("Rendered: {}", stats.chunk_count));
+                            ui.add(
+                                egui::Slider::new(&mut generation_radius, 1..=16)
+                                    .text("Generation Radius"),
+                            );
+                            ui.add(egui::Slider::new(&mut lod_shift, 0..=4).text("Exp LoD Scale"));
+                        });
 
-                        egui::CollapsingHeader::new("Misc")
-                            .default_open(true)
-                            .show(ui, |ui| {
-                                ui.add(
-                                    egui::Slider::new(&mut camera.fovy, 1.0..=180.0).text("FoV"),
-                                );
-                                ui.checkbox(&mut enable_gizmos, "Gizmos");
-                            });
-                    });
+                    egui::CollapsingHeader::new("Misc")
+                        .default_open(true)
+                        .show(ui, |ui| {
+                            ui.add(egui::Slider::new(&mut camera.fovy, 1.0..=180.0).text("FoV"));
+                            ui.checkbox(&mut enable_gizmos, "Gizmos");
+                        });
+                });
+
+                if show_profiler {
+                    show_profiler = puffin_egui::profiler_window(ctx);
+                }
             });
 
             window.set_cursor_icon(match ui_output.platform_output.cursor_icon {
@@ -458,6 +461,8 @@ async fn run() {
 
             // Record new chunk generation tasks
             {
+                puffin::profile_scope!("Record Tasks");
+
                 let mut tasks = tasks.lock();
 
                 // Cancel outdated tasks which are not yet in progress
