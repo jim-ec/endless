@@ -167,11 +167,10 @@ impl Renderer {
             None,
         );
 
-        let mut command_buffers = Vec::new();
+        let mut command_encoder = self.device.create_command_encoder(&Default::default());
 
         // Clear
         {
-            let mut command_encoder = self.device.create_command_encoder(&Default::default());
             command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: None,
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -196,7 +195,6 @@ impl Renderer {
                     stencil_ops: None,
                 }),
             });
-            command_buffers.push(command_encoder.finish());
         }
 
         // Chunks
@@ -239,7 +237,8 @@ impl Renderer {
 
             stats.chunk_count += 1;
 
-            command_buffers.push(self.voxel_pipeline.render(
+            self.voxel_pipeline.render(
+                &mut command_encoder,
                 &self.device,
                 &self.queue,
                 &chunk.voxel_mesh,
@@ -248,14 +247,12 @@ impl Renderer {
                 camera.translation,
                 &view,
                 &depth_texture_view,
-            ));
+            );
         }
 
         // Gizmos
         if enable_gizmos {
             self.gizmos.prepare(&self.queue, self.camera_symmetry, proj);
-
-            let mut command_encoder = self.device.create_command_encoder(&Default::default());
 
             let mut render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -278,9 +275,6 @@ impl Renderer {
             });
 
             self.gizmos.render(&mut render_pass);
-
-            drop(render_pass);
-            command_buffers.push(command_encoder.finish());
         }
 
         // UI
@@ -294,8 +288,6 @@ impl Renderer {
             }
 
             let triangles = self.ui_ctx.tessellate(ui_output.shapes);
-
-            let mut command_encoder = self.device.create_command_encoder(&Default::default());
 
             self.ui_renderer.update_buffers(
                 &self.device,
@@ -336,11 +328,9 @@ impl Renderer {
                     pixels_per_point: scale_factor,
                 },
             );
-            drop(render_pass);
-            command_buffers.push(command_encoder.finish());
         }
 
-        self.queue.submit(command_buffers);
+        self.queue.submit([command_encoder.finish()]);
         surface_texture.present();
 
         self.gizmos.clear();

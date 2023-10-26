@@ -140,6 +140,7 @@ impl VoxelPipeline {
     #[allow(clippy::too_many_arguments)]
     pub fn render(
         &self,
+        command_encoder: &mut wgpu::CommandEncoder,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         mesh: &VoxelMesh,
@@ -148,7 +149,7 @@ impl VoxelPipeline {
         light: Vector3<f32>,
         color: &wgpu::TextureView,
         depth: &wgpu::TextureView,
-    ) -> wgpu::CommandBuffer {
+    ) {
         queue.write_buffer(
             &mesh.uniform_buffer,
             0,
@@ -159,8 +160,6 @@ impl VoxelPipeline {
                 light,
             }]),
         );
-
-        let mut command_encoder = device.create_command_encoder(&Default::default());
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
@@ -195,9 +194,6 @@ impl VoxelPipeline {
         render_pass.set_bind_group(0, &bind_group, &[]);
         render_pass.set_vertex_buffer(0, mesh.buffer.slice(..));
         render_pass.draw(0..mesh.count as u32, 0..1);
-
-        drop(render_pass);
-        command_encoder.finish()
     }
 }
 
