@@ -26,7 +26,7 @@ unsafe impl bytemuck::Zeroable for Uniforms {}
 
 #[derive(Debug)]
 pub struct VoxelMesh {
-    symmetry: Symmetry,
+    pub symmetry: Symmetry,
     buffer: wgpu::Buffer,
     count: usize,
 }

@@ -26,8 +26,6 @@ use winit::{
 };
 use world::{Chunk, N};
 
-use crate::world::K;
-
 pub const FRAME_TIME: f32 = 1.0 / 60.0;
 
 fn main() {
@@ -41,7 +39,7 @@ async fn run() {
     let window = WindowBuilder::new()
         .with_title("")
         .with_visible(false)
-        .with_maximized(true)
+        // .with_maximized(true)
         .build(&event_loop)
         .unwrap();
 
@@ -361,7 +359,7 @@ async fn run() {
                                 ui.label(format!("Total: {}", world.chunks.len()));
                                 ui.label(format!("Rendered: {}", stats.chunk_count));
                                 ui.add(
-                                    egui::Slider::new(&mut generation_radius, 1..=K as isize)
+                                    egui::Slider::new(&mut generation_radius, 1..=16)
                                         .text("Generation Radius"),
                                 );
                                 ui.add(
@@ -449,7 +447,7 @@ async fn run() {
                 for y in -generation_radius..=generation_radius {
                     for z in 0..=1 {
                         let c = vec3(camera_index.x + x, camera_index.y + y, z);
-                        let lod = x.unsigned_abs().min(y.unsigned_abs());
+                        let lod = x.unsigned_abs() + y.unsigned_abs();
                         let lod = lod >> lod_shift;
                         if (N >> lod) > 0 {
                             required_chunks.insert((c, lod));

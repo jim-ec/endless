@@ -3,10 +3,15 @@ pub mod voxels;
 
 use std::{collections::HashMap, sync::Arc};
 
-use cgmath::Vector3;
+use cgmath::{vec4, InnerSpace, Matrix, Vector3};
+use itertools::Itertools;
 use winit::window::Window;
 
-use crate::{camera, symmetry::Symmetry, world::Chunk};
+use crate::{
+    camera,
+    symmetry::Symmetry,
+    world::{Chunk, N},
+};
 
 use self::{
     gizmos::Gizmos,
@@ -193,6 +198,42 @@ impl Renderer {
 
         // Chunks
         for chunk in chunks.values() {
+            // Frustum culling
+            {
+                // Since this is the full model-view-projection matrix, the extracted
+                // planes are in model space.
+                let m = (proj * self.camera_symmetry.matrix() * chunk.voxel_mesh.symmetry.matrix())
+                    .transpose();
+
+                // We do not test against the far plane because that is handled by the generation radius.
+                let planes = [
+                    m[3] + m[0], // left
+                    m[3] - m[0], // right
+                    m[3] + m[1], // bottom
+                    m[3] - m[1], // top
+                    m[3] + m[2], // near
+                ];
+
+                // The extent of the unit cube we are testing against
+                let max = N as f32 / chunk.voxel_mesh.symmetry.scale;
+
+                // A chunk is partially visible if:
+                // ∀ plane ∈ planes: ∃ vertex ∈ chunk: dist(plane, vertex) > 0
+                // Applying De Morgan's law:
+                // ¬(∀ plane ∈ planes: ∃ vertex ∈ chunk: dist(plane, vertex) > 0)
+                // = ∃ plane ∈ planes: ¬(∃ vertex ∈ chunk: dist(plane, vertex) > 0)
+                // = ∃ plane ∈ planes: ∀ vertex ∈ chunk: dist(plane, vertex) ≤ 0
+                if planes.into_iter().any(|plane| {
+                    [0.0, max]
+                        .into_iter()
+                        .cartesian_product([0.0, max])
+                        .cartesian_product([0.0, max])
+                        .all(|((x, y), z)| plane.dot(vec4(x, y, z, 1.0)) <= 0.0)
+                }) {
+                    continue;
+                }
+            }
+
             self.voxel_pipeline.prepare(
                 &self.queue,
                 &chunk.voxel_mesh,
