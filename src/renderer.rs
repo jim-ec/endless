@@ -32,7 +32,7 @@ pub struct Renderer {
     camera_symmetry: Symmetry,
     camera_fovy: f32,
     pub gizmos: Gizmos,
-    voxel_pipeline: VoxelPipeline,
+    pub(super) voxel_pipeline: VoxelPipeline,
     chunk_meshes: HashMap<Vector3<isize>, VoxelMesh>,
 }
 
@@ -200,59 +200,118 @@ impl Renderer {
         }
 
         // Chunks
+        let mut visible_chunks = vec![];
+        {
+            puffin::profile_scope!("Cull Chunks");
+
+            for chunk in chunks.values() {
+                // Since this is the full model-view-projection matrix, the extracted
+                // planes are in model space.
+                let m = (proj * self.camera_symmetry.matrix() * chunk.voxel_mesh.symmetry.matrix())
+                    .transpose();
+
+                // We do not test against the far plane because that is handled by the generation radius.
+                let planes = [
+                    m[3] + m[0], // left
+                    m[3] - m[0], // right
+                    m[3] + m[1], // bottom
+                    m[3] - m[1], // top
+                    m[3] + m[2], // near
+                ];
+
+                // The extent of the unit cube we are testing against
+                let max = N as f32 / chunk.voxel_mesh.symmetry.scale;
+
+                // A chunk is partially visible if:
+                // ∀ plane ∈ planes: ∃ vertex ∈ chunk: dist(plane, vertex) > 0
+                // Applying De Morgan's law:
+                // ¬(∀ plane ∈ planes: ∃ vertex ∈ chunk: dist(plane, vertex) > 0)
+                // = ∃ plane ∈ planes: ¬(∃ vertex ∈ chunk: dist(plane, vertex) > 0)
+                // = ∃ plane ∈ planes: ∀ vertex ∈ chunk: dist(plane, vertex) ≤ 0
+                if !planes.into_iter().any(|plane| {
+                    [0.0, max]
+                        .into_iter()
+                        .cartesian_product([0.0, max])
+                        .cartesian_product([0.0, max])
+                        .all(|((x, y), z)| plane.dot(vec4(x, y, z, 1.0)) <= 0.0)
+                }) {
+                    visible_chunks.push(chunk);
+                    stats.chunk_count += 1;
+                }
+            }
+        }
+
         {
             puffin::profile_scope!("Render Chunks");
-            for chunk in chunks.values() {
-                // Frustum culling
+
+            let mut bind_groups = vec![];
+
+            let mut render_pass = {
+                puffin::profile_scope!("Begin Render Pass");
+                command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: true,
+                        },
+                    })],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &depth_texture_view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: true,
+                        }),
+                        stencil_ops: None,
+                    }),
+                    ..Default::default()
+                })
+            };
+
+            render_pass.set_pipeline(&self.voxel_pipeline.pipeline);
+
+            for chunk in &visible_chunks {
+                // TODO: Allocate a single uniform buffer and have bind groups point to different regions of it
                 {
-                    // Since this is the full model-view-projection matrix, the extracted
-                    // planes are in model space.
-                    let m =
-                        (proj * self.camera_symmetry.matrix() * chunk.voxel_mesh.symmetry.matrix())
-                            .transpose();
-
-                    // We do not test against the far plane because that is handled by the generation radius.
-                    let planes = [
-                        m[3] + m[0], // left
-                        m[3] - m[0], // right
-                        m[3] + m[1], // bottom
-                        m[3] - m[1], // top
-                        m[3] + m[2], // near
-                    ];
-
-                    // The extent of the unit cube we are testing against
-                    let max = N as f32 / chunk.voxel_mesh.symmetry.scale;
-
-                    // A chunk is partially visible if:
-                    // ∀ plane ∈ planes: ∃ vertex ∈ chunk: dist(plane, vertex) > 0
-                    // Applying De Morgan's law:
-                    // ¬(∀ plane ∈ planes: ∃ vertex ∈ chunk: dist(plane, vertex) > 0)
-                    // = ∃ plane ∈ planes: ¬(∃ vertex ∈ chunk: dist(plane, vertex) > 0)
-                    // = ∃ plane ∈ planes: ∀ vertex ∈ chunk: dist(plane, vertex) ≤ 0
-                    if planes.into_iter().any(|plane| {
-                        [0.0, max]
-                            .into_iter()
-                            .cartesian_product([0.0, max])
-                            .cartesian_product([0.0, max])
-                            .all(|((x, y), z)| plane.dot(vec4(x, y, z, 1.0)) <= 0.0)
-                    }) {
-                        continue;
-                    }
+                    puffin::profile_scope!("Update Uniform Buffer");
+                    self.queue.write_buffer(
+                        &chunk.voxel_mesh.uniform_buffer,
+                        0,
+                        bytemuck::cast_slice(&[voxels::Uniforms {
+                            model: chunk.voxel_mesh.symmetry.matrix(),
+                            view: self.camera_symmetry.matrix(),
+                            proj,
+                            light: camera.translation,
+                        }]),
+                    );
                 }
 
-                stats.chunk_count += 1;
+                bind_groups.push({
+                    puffin::profile_scope!("Create Bind Group");
+                    self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: None,
+                        layout: &self.voxel_pipeline.bind_group_layout,
+                        entries: &[wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: chunk.voxel_mesh.uniform_buffer.as_entire_binding(),
+                        }],
+                    })
+                });
+            }
 
-                self.voxel_pipeline.render(
-                    &mut command_encoder,
-                    &self.device,
-                    &self.queue,
-                    &chunk.voxel_mesh,
-                    self.camera_symmetry,
-                    proj,
-                    camera.translation,
-                    &view,
-                    &depth_texture_view,
-                );
+            for (chunk, bind_group) in visible_chunks.iter().zip(bind_groups.iter()) {
+                {
+                    puffin::profile_scope!("Record Render Pass");
+                    render_pass.set_bind_group(0, bind_group, &[]);
+                    render_pass.set_vertex_buffer(0, chunk.voxel_mesh.buffer.slice(..));
+                    render_pass.draw(0..chunk.voxel_mesh.count as u32, 0..1);
+                }
+            }
+
+            {
+                puffin::profile_scope!("End Render Pass");
+                drop(render_pass);
             }
         }
 

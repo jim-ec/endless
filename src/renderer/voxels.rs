@@ -7,13 +7,13 @@ use cgmath::{vec3, InnerSpace, Matrix4, Quaternion, Vector3};
 use wgpu::util::DeviceExt;
 
 pub struct VoxelPipeline {
-    pipeline: wgpu::RenderPipeline,
-    bind_group_layout: wgpu::BindGroupLayout,
+    pub(super) pipeline: wgpu::RenderPipeline,
+    pub(super) bind_group_layout: wgpu::BindGroupLayout,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-pub struct Uniforms {
+pub(super) struct Uniforms {
     pub model: Matrix4<f32>,
     pub view: Matrix4<f32>,
     pub proj: Matrix4<f32>,
@@ -26,9 +26,9 @@ unsafe impl bytemuck::Zeroable for Uniforms {}
 #[derive(Debug)]
 pub struct VoxelMesh {
     pub symmetry: Symmetry,
-    buffer: wgpu::Buffer,
-    count: usize,
-    uniform_buffer: wgpu::Buffer,
+    pub(super) buffer: wgpu::Buffer,
+    pub(super) count: usize,
+    pub(super) uniform_buffer: wgpu::Buffer,
 }
 
 struct Vertex {
@@ -134,66 +134,6 @@ impl VoxelPipeline {
             pipeline,
             bind_group_layout,
         }
-    }
-
-    // TODO: Somehow refactor this monster function
-    #[allow(clippy::too_many_arguments)]
-    pub fn render(
-        &self,
-        command_encoder: &mut wgpu::CommandEncoder,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        mesh: &VoxelMesh,
-        camera: Symmetry,
-        proj: Matrix4<f32>,
-        light: Vector3<f32>,
-        color: &wgpu::TextureView,
-        depth: &wgpu::TextureView,
-    ) {
-        queue.write_buffer(
-            &mesh.uniform_buffer,
-            0,
-            bytemuck::cast_slice(&[Uniforms {
-                model: mesh.symmetry.matrix(),
-                view: camera.matrix(),
-                proj,
-                light,
-            }]),
-        );
-
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: &self.bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: mesh.uniform_buffer.as_entire_binding(),
-            }],
-        });
-
-        let mut render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: color,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: true,
-                },
-            })],
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: depth,
-                depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: true,
-                }),
-                stencil_ops: None,
-            }),
-            ..Default::default()
-        });
-
-        render_pass.set_pipeline(&self.pipeline);
-        render_pass.set_bind_group(0, &bind_group, &[]);
-        render_pass.set_vertex_buffer(0, mesh.buffer.slice(..));
-        render_pass.draw(0..mesh.count as u32, 0..1);
     }
 }
 
