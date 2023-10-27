@@ -38,7 +38,7 @@ pub struct Renderer {
     chunk_uniform_buffer: wgpu::Buffer,
 }
 
-const MAX_CHUNK_UNIFORMS: usize = 4096; // TODO: Smaller size, but resize on demand
+const MAX_VOXEL_UNIFORMS: usize = 4096;
 
 #[derive(Default)]
 pub struct RenderStats {
@@ -96,10 +96,10 @@ impl Renderer {
 
         let chunk_uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            size: util::align(
-                MAX_CHUNK_UNIFORMS * std::mem::size_of::<voxels::Uniforms>(),
-                16,
-            ) as wgpu::BufferAddress,
+            size: (util::align(
+                std::mem::size_of::<voxels::Uniforms>(),
+                std::mem::align_of::<voxels::Uniforms>(),
+            ) * MAX_VOXEL_UNIFORMS) as wgpu::BufferAddress,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -186,69 +186,69 @@ impl Renderer {
 
         let mut command_encoder = self.device.create_command_encoder(&Default::default());
 
-        let ui_triangles = self.ui_ctx.tessellate(ui_output.shapes);
-        self.ui_renderer.update_buffers(
-            &self.device,
-            &self.queue,
-            &mut command_encoder,
-            &ui_triangles,
-            &egui_wgpu::renderer::ScreenDescriptor {
-                size_in_pixels: [self.config.width, self.config.height],
-                pixels_per_point: scale_factor,
-            },
-        );
-        for (id, delta) in &ui_output.textures_delta.set {
-            self.ui_renderer
-                .update_texture(&self.device, &self.queue, *id, delta);
-        }
-        for id in &ui_output.textures_delta.free {
-            self.ui_renderer.free_texture(id);
-        }
-
-        let mut visible_chunks = vec![];
-        {
-            puffin::profile_scope!("Cull Chunks");
-
-            for chunk in chunks.values() {
-                // Since this is the full model-view-projection matrix, the extracted
-                // planes are in model space.
-                let m = (proj * self.camera_symmetry.matrix() * chunk.voxel_mesh.symmetry.matrix())
-                    .transpose();
-
-                // We do not test against the far plane because that is handled by the generation radius.
-                let planes = [
-                    m[3] + m[0], // left
-                    m[3] - m[0], // right
-                    m[3] + m[1], // bottom
-                    m[3] - m[1], // top
-                    m[3] + m[2], // near
-                ];
-
-                // The extent of the unit cube we are testing against
-                let max = N as f32 / chunk.voxel_mesh.symmetry.scale;
-
-                // A chunk is partially visible if:
-                // ∀ plane ∈ planes: ∃ vertex ∈ chunk: dist(plane, vertex) > 0
-                // Applying De Morgan's law:
-                // ¬(∀ plane ∈ planes: ∃ vertex ∈ chunk: dist(plane, vertex) > 0)
-                // = ∃ plane ∈ planes: ¬(∃ vertex ∈ chunk: dist(plane, vertex) > 0)
-                // = ∃ plane ∈ planes: ∀ vertex ∈ chunk: dist(plane, vertex) ≤ 0
-                if !planes.into_iter().any(|plane| {
-                    [0.0, max]
-                        .into_iter()
-                        .cartesian_product([0.0, max])
-                        .cartesian_product([0.0, max])
-                        .all(|((x, y), z)| plane.dot(vec4(x, y, z, 1.0)) <= 0.0)
-                }) {
-                    visible_chunks.push(chunk);
-                    stats.chunk_count += 1;
-                }
+        let ui_triangles = {
+            puffin::profile_scope!("Prepare UI");
+            let ui_triangles = self.ui_ctx.tessellate(ui_output.shapes);
+            self.ui_renderer.update_buffers(
+                &self.device,
+                &self.queue,
+                &mut command_encoder,
+                &ui_triangles,
+                &egui_wgpu::renderer::ScreenDescriptor {
+                    size_in_pixels: [self.config.width, self.config.height],
+                    pixels_per_point: scale_factor,
+                },
+            );
+            for (id, delta) in &ui_output.textures_delta.set {
+                self.ui_renderer
+                    .update_texture(&self.device, &self.queue, *id, delta);
             }
-        }
+            for id in &ui_output.textures_delta.free {
+                self.ui_renderer.free_texture(id);
+            }
+            ui_triangles
+        };
+
+        let chunks: Vec<_> = {
+            puffin::profile_scope!("Cull Chunks");
+            let view_proj = proj * self.camera_symmetry.matrix();
+            chunks
+                .values()
+                .filter(|chunk| {
+                    // Since this is the full model-view-projection matrix, the extracted
+                    // planes are in model space.
+                    let m = (view_proj * chunk.voxel_mesh.symmetry.matrix()).transpose();
+
+                    // We do not test against the far plane because that is handled by the generation radius.
+                    let planes = [
+                        m[3] + m[0], // left
+                        m[3] - m[0], // right
+                        m[3] + m[1], // bottom
+                        m[3] - m[1], // top
+                        m[3] + m[2], // near
+                    ];
+
+                    // The extent of the unit cube we are testing against
+                    let max = N as f32 / chunk.voxel_mesh.symmetry.scale;
+
+                    // A chunk is partially visible if:
+                    // ∀ plane ∈ planes: ∃ vertex ∈ chunk: dist(plane, vertex) > 0
+                    planes.into_iter().all(|plane| {
+                        [0.0, max]
+                            .into_iter()
+                            .cartesian_product([0.0, max])
+                            .cartesian_product([0.0, max])
+                            .any(|((x, y), z)| plane.dot(vec4(x, y, z, 1.0)) > 0.0)
+                    })
+                })
+                .collect()
+        };
+        stats.chunk_count = chunks.len();
+        assert!(chunks.len() <= MAX_VOXEL_UNIFORMS);
 
         let bind_groups: Vec<_> = {
             puffin::profile_scope!("Create Bind Groups");
-            (0..visible_chunks.len())
+            (0..chunks.len())
                 .map(|i| {
                     self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                         label: None,
@@ -301,7 +301,7 @@ impl Renderer {
         {
             puffin::profile_scope!("Update Uniform Buffer");
 
-            let uniforms: Vec<_> = visible_chunks
+            let uniforms: Vec<_> = chunks
                 .iter()
                 .map(|chunk| voxels::Uniforms {
                     model: chunk.voxel_mesh.symmetry.matrix(),
@@ -310,10 +310,6 @@ impl Renderer {
                     light: camera.translation,
                 })
                 .collect();
-            assert!(
-                uniforms.len() <= MAX_CHUNK_UNIFORMS,
-                "Chunk uniform buffer out of memory"
-            );
 
             self.queue.write_buffer(
                 &self.chunk_uniform_buffer,
@@ -327,7 +323,7 @@ impl Renderer {
 
             render_pass.set_pipeline(&self.voxel_pipeline.pipeline);
 
-            for (chunk, bind_group) in visible_chunks.iter().zip(bind_groups.iter()) {
+            for (chunk, bind_group) in chunks.iter().zip(bind_groups.iter()) {
                 {
                     puffin::profile_scope!("Record Render Pass");
                     render_pass.set_bind_group(0, bind_group, &[]);
