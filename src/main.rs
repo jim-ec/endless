@@ -361,7 +361,7 @@ async fn run() {
                             ui.label(format!("Total: {}", world.chunks.len()));
                             ui.label(format!("Rendered: {}", stats.chunk_count));
                             ui.add(
-                                egui::Slider::new(&mut generation_radius, 1..=16)
+                                egui::Slider::new(&mut generation_radius, 1..=36)
                                     .text("Generation Radius"),
                             );
                             ui.add(egui::Slider::new(&mut lod_shift, 0..=4).text("Exp LoD Scale"));
