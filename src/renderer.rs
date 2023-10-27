@@ -10,6 +10,7 @@ use winit::window::Window;
 use crate::{
     camera,
     symmetry::Symmetry,
+    util,
     world::{Chunk, N},
 };
 
@@ -34,7 +35,10 @@ pub struct Renderer {
     pub gizmos: Gizmos,
     pub(super) voxel_pipeline: VoxelPipeline,
     chunk_meshes: HashMap<Vector3<isize>, VoxelMesh>,
+    chunk_uniform_buffer: wgpu::Buffer,
 }
+
+const MAX_CHUNK_UNIFORMS: usize = 4096; // TODO: Smaller size, but resize on demand
 
 #[derive(Default)]
 pub struct RenderStats {
@@ -90,6 +94,16 @@ impl Renderer {
             }),
         );
 
+        let chunk_uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: util::align(
+                MAX_CHUNK_UNIFORMS * std::mem::size_of::<voxels::Uniforms>(),
+                16,
+            ) as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
         Self {
             ui_renderer: egui_wgpu::Renderer::new(&device, config.format, Some(DEPTH_FORMAT), 1),
             ui_ctx: egui::Context::default(),
@@ -104,6 +118,7 @@ impl Renderer {
             camera_symmetry: camera::Camera::initial().symmetry(),
             camera_fovy: camera::Camera::initial().fovy,
             chunk_meshes: HashMap::new(),
+            chunk_uniform_buffer,
         }
     }
 
@@ -242,9 +257,59 @@ impl Renderer {
         }
 
         {
-            puffin::profile_scope!("Render Chunks");
+            puffin::profile_scope!("Update Uniform Buffer");
 
-            let mut bind_groups = vec![];
+            let uniforms: Vec<_> = visible_chunks
+                .iter()
+                .map(|chunk| voxels::Uniforms {
+                    model: chunk.voxel_mesh.symmetry.matrix(),
+                    view: self.camera_symmetry.matrix(),
+                    proj,
+                    light: camera.translation,
+                })
+                .collect();
+            assert!(
+                uniforms.len() <= MAX_CHUNK_UNIFORMS,
+                "Chunk uniform buffer out of memory"
+            );
+
+            self.queue.write_buffer(
+                &self.chunk_uniform_buffer,
+                0,
+                bytemuck::cast_slice(uniforms.as_slice()),
+            );
+        }
+
+        let bind_groups: Vec<_> = {
+            puffin::profile_scope!("Create Bind Groups");
+
+            (0..visible_chunks.len())
+                .map(|i| {
+                    self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: None,
+                        layout: &self.voxel_pipeline.bind_group_layout,
+                        entries: &[wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                                buffer: &self.chunk_uniform_buffer,
+                                offset: (i * std::mem::size_of::<voxels::Uniforms>())
+                                    as wgpu::BufferAddress,
+                                size: Some(unsafe {
+                                    wgpu::BufferSize::new_unchecked(std::mem::size_of::<
+                                        voxels::Uniforms,
+                                    >(
+                                    )
+                                        as wgpu::BufferAddress)
+                                }),
+                            }),
+                        }],
+                    })
+                })
+                .collect()
+        };
+
+        {
+            puffin::profile_scope!("Render Chunks");
 
             let mut render_pass = {
                 puffin::profile_scope!("Begin Render Pass");
@@ -270,35 +335,6 @@ impl Renderer {
             };
 
             render_pass.set_pipeline(&self.voxel_pipeline.pipeline);
-
-            for chunk in &visible_chunks {
-                // TODO: Allocate a single uniform buffer and have bind groups point to different regions of it
-                {
-                    puffin::profile_scope!("Update Uniform Buffer");
-                    self.queue.write_buffer(
-                        &chunk.voxel_mesh.uniform_buffer,
-                        0,
-                        bytemuck::cast_slice(&[voxels::Uniforms {
-                            model: chunk.voxel_mesh.symmetry.matrix(),
-                            view: self.camera_symmetry.matrix(),
-                            proj,
-                            light: camera.translation,
-                        }]),
-                    );
-                }
-
-                bind_groups.push({
-                    puffin::profile_scope!("Create Bind Group");
-                    self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                        label: None,
-                        layout: &self.voxel_pipeline.bind_group_layout,
-                        entries: &[wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: chunk.voxel_mesh.uniform_buffer.as_entire_binding(),
-                        }],
-                    })
-                });
-            }
 
             for (chunk, bind_group) in visible_chunks.iter().zip(bind_groups.iter()) {
                 {

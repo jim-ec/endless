@@ -1,7 +1,6 @@
 use crate::{
     field::{Field, Vis},
     symmetry::Symmetry,
-    util,
 };
 use cgmath::{vec3, InnerSpace, Matrix4, Quaternion, Vector3};
 use wgpu::util::DeviceExt;
@@ -11,7 +10,11 @@ pub struct VoxelPipeline {
     pub(super) bind_group_layout: wgpu::BindGroupLayout,
 }
 
+/// Uniforms for one chunk.
+/// Since we allocate a single buffer for chunk uniforms, the alignment
+/// needs to conform to [`wgpu::Limits::min_uniform_buffer_offset_alignment`].
 #[repr(C)]
+#[repr(align(256))]
 #[derive(Copy, Clone, Debug)]
 pub(super) struct Uniforms {
     pub model: Matrix4<f32>,
@@ -28,7 +31,6 @@ pub struct VoxelMesh {
     pub symmetry: Symmetry,
     pub(super) buffer: wgpu::Buffer,
     pub(super) count: usize,
-    pub(super) uniform_buffer: wgpu::Buffer,
 }
 
 struct Vertex {
@@ -203,13 +205,6 @@ impl VoxelMesh {
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-        let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
-            size: util::align(std::mem::size_of::<Uniforms>(), 16) as wgpu::BufferAddress,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
         Self {
             symmetry: Symmetry {
                 rotation: Quaternion::new(1.0, 0.0, 0.0, 0.0),
@@ -218,7 +213,6 @@ impl VoxelMesh {
             },
             buffer,
             count: vertices.len(),
-            uniform_buffer,
         }
     }
 }
