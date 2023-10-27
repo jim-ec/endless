@@ -186,35 +186,25 @@ impl Renderer {
 
         let mut command_encoder = self.device.create_command_encoder(&Default::default());
 
-        // Clear
-        {
-            command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: None,
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.01,
-                            g: 0.01,
-                            b: 0.01,
-                            a: 1.0,
-                        }),
-                        store: true,
-                    },
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &depth_texture_view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: true,
-                    }),
-                    stencil_ops: None,
-                }),
-            });
+        let ui_triangles = self.ui_ctx.tessellate(ui_output.shapes);
+        self.ui_renderer.update_buffers(
+            &self.device,
+            &self.queue,
+            &mut command_encoder,
+            &ui_triangles,
+            &egui_wgpu::renderer::ScreenDescriptor {
+                size_in_pixels: [self.config.width, self.config.height],
+                pixels_per_point: scale_factor,
+            },
+        );
+        for (id, delta) in &ui_output.textures_delta.set {
+            self.ui_renderer
+                .update_texture(&self.device, &self.queue, *id, delta);
+        }
+        for id in &ui_output.textures_delta.free {
+            self.ui_renderer.free_texture(id);
         }
 
-        // Chunks
         let mut visible_chunks = vec![];
         {
             puffin::profile_scope!("Cull Chunks");
@@ -256,33 +246,8 @@ impl Renderer {
             }
         }
 
-        {
-            puffin::profile_scope!("Update Uniform Buffer");
-
-            let uniforms: Vec<_> = visible_chunks
-                .iter()
-                .map(|chunk| voxels::Uniforms {
-                    model: chunk.voxel_mesh.symmetry.matrix(),
-                    view: self.camera_symmetry.matrix(),
-                    proj,
-                    light: camera.translation,
-                })
-                .collect();
-            assert!(
-                uniforms.len() <= MAX_CHUNK_UNIFORMS,
-                "Chunk uniform buffer out of memory"
-            );
-
-            self.queue.write_buffer(
-                &self.chunk_uniform_buffer,
-                0,
-                bytemuck::cast_slice(uniforms.as_slice()),
-            );
-        }
-
         let bind_groups: Vec<_> = {
             puffin::profile_scope!("Create Bind Groups");
-
             (0..visible_chunks.len())
                 .map(|i| {
                     self.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -308,31 +273,57 @@ impl Renderer {
                 .collect()
         };
 
+        let mut render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: None,
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: 0.01,
+                        g: 0.01,
+                        b: 0.01,
+                        a: 1.0,
+                    }),
+                    store: true,
+                },
+            })],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &depth_texture_view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(1.0),
+                    store: true,
+                }),
+                stencil_ops: None,
+            }),
+        });
+
+        {
+            puffin::profile_scope!("Update Uniform Buffer");
+
+            let uniforms: Vec<_> = visible_chunks
+                .iter()
+                .map(|chunk| voxels::Uniforms {
+                    model: chunk.voxel_mesh.symmetry.matrix(),
+                    view: self.camera_symmetry.matrix(),
+                    proj,
+                    light: camera.translation,
+                })
+                .collect();
+            assert!(
+                uniforms.len() <= MAX_CHUNK_UNIFORMS,
+                "Chunk uniform buffer out of memory"
+            );
+
+            self.queue.write_buffer(
+                &self.chunk_uniform_buffer,
+                0,
+                bytemuck::cast_slice(uniforms.as_slice()),
+            );
+        }
+
         {
             puffin::profile_scope!("Render Chunks");
-
-            let mut render_pass = {
-                puffin::profile_scope!("Begin Render Pass");
-                command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: true,
-                        },
-                    })],
-                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                        view: &depth_texture_view,
-                        depth_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: true,
-                        }),
-                        stencil_ops: None,
-                    }),
-                    ..Default::default()
-                })
-            };
 
             render_pass.set_pipeline(&self.voxel_pipeline.pipeline);
 
@@ -344,92 +335,25 @@ impl Renderer {
                     render_pass.draw(0..chunk.voxel_mesh.count as u32, 0..1);
                 }
             }
-
-            {
-                puffin::profile_scope!("End Render Pass");
-                drop(render_pass);
-            }
         }
 
         // Gizmos
         if enable_gizmos {
             self.gizmos.prepare(&self.queue, self.camera_symmetry, proj);
-
-            let mut render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: true,
-                    },
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &depth_texture_view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: true,
-                    }),
-                    stencil_ops: None,
-                }),
-                ..Default::default()
-            });
-
             self.gizmos.render(&mut render_pass);
         }
 
         // UI
-        {
-            for (id, delta) in &ui_output.textures_delta.set {
-                self.ui_renderer
-                    .update_texture(&self.device, &self.queue, *id, delta);
-            }
-            for id in &ui_output.textures_delta.free {
-                self.ui_renderer.free_texture(id);
-            }
+        self.ui_renderer.render(
+            &mut render_pass,
+            &ui_triangles,
+            &egui_wgpu::renderer::ScreenDescriptor {
+                size_in_pixels: [self.config.width, self.config.height],
+                pixels_per_point: scale_factor,
+            },
+        );
 
-            let triangles = self.ui_ctx.tessellate(ui_output.shapes);
-
-            self.ui_renderer.update_buffers(
-                &self.device,
-                &self.queue,
-                &mut command_encoder,
-                &triangles,
-                &egui_wgpu::renderer::ScreenDescriptor {
-                    size_in_pixels: [self.config.width, self.config.height],
-                    pixels_per_point: scale_factor,
-                },
-            );
-
-            let mut render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: true,
-                    },
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &depth_texture_view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: true,
-                    }),
-                    stencil_ops: None,
-                }),
-                ..Default::default()
-            });
-
-            self.ui_renderer.render(
-                &mut render_pass,
-                &triangles,
-                &egui_wgpu::renderer::ScreenDescriptor {
-                    size_in_pixels: [self.config.width, self.config.height],
-                    pixels_per_point: scale_factor,
-                },
-            );
-        }
+        drop(render_pass);
 
         self.queue.submit([command_encoder.finish()]);
         surface_texture.present();
