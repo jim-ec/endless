@@ -62,6 +62,7 @@ async fn run() {
     let mut world = world::World::default();
     let mut generation_radius = 7;
     let mut lod_shift = 2;
+    let mut lod_offset = 0;
     let mut enable_gizmos = false;
 
     let mut stats = renderer::RenderStats::default();
@@ -364,7 +365,8 @@ async fn run() {
                                 egui::Slider::new(&mut generation_radius, 1..=36)
                                     .text("Generation Radius"),
                             );
-                            ui.add(egui::Slider::new(&mut lod_shift, 0..=4).text("Exp LoD Scale"));
+                            ui.add(egui::Slider::new(&mut lod_offset, 0..=4).text("LoD Offset"));
+                            ui.add(egui::Slider::new(&mut lod_shift, 0..=4).text("LoD Exp Scale"));
                         });
 
                     egui::CollapsingHeader::new("Misc")
@@ -444,6 +446,7 @@ async fn run() {
                         let c = vec3(camera_index.x + x, camera_index.y + y, z);
                         let lod = x.unsigned_abs() + y.unsigned_abs();
                         let lod = lod >> lod_shift;
+                        let lod = lod.saturating_sub(lod_offset);
                         if (N >> lod) > 0 {
                             required_chunks.insert((c, lod));
                         }
