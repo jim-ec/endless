@@ -19,8 +19,6 @@ pub struct World {
 
 pub struct Chunk {
     pub lod: usize,
-    pub mask: Field<bool, 3>,
-    pub color: Field<Vector3<f32>, 3>,
     pub voxel_mesh: VoxelMesh,
 }
 
@@ -131,11 +129,6 @@ impl Chunk {
             )
         };
 
-        Self {
-            lod,
-            mask,
-            color,
-            voxel_mesh,
-        }
+        Self { lod, voxel_mesh }
     }
 }

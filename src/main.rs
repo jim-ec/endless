@@ -424,15 +424,7 @@ async fn run() {
                 .unwrap();
 
             while let Ok((key, chunk)) = chunk_receiver.try_recv() {
-                world.chunks.insert(
-                    key,
-                    world::Chunk {
-                        lod: chunk.lod,
-                        mask: chunk.mask,
-                        color: chunk.color,
-                        voxel_mesh: chunk.voxel_mesh,
-                    },
-                );
+                world.chunks.insert(key, chunk);
             }
 
             let mut required_chunks = HashSet::new();
