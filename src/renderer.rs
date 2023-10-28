@@ -249,32 +249,18 @@ impl Renderer {
         stats.chunk_count = chunks.len();
         assert!(chunks.len() <= MAX_VOXEL_UNIFORMS);
 
-        let bind_groups: Vec<_> = {
-            puffin::profile_scope!("Create Bind Groups");
-            (0..chunks.len())
-                .map(|i| {
-                    self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                        label: None,
-                        layout: &self.voxel_pipeline.bind_group_layout,
-                        entries: &[wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                                buffer: &self.chunk_uniform_buffer,
-                                offset: (i * std::mem::size_of::<voxels::ChunkUniforms>())
-                                    as wgpu::BufferAddress,
-                                size: Some(unsafe {
-                                    wgpu::BufferSize::new_unchecked(std::mem::size_of::<
-                                        voxels::ChunkUniforms,
-                                    >(
-                                    )
-                                        as wgpu::BufferAddress)
-                                }),
-                            }),
-                        }],
-                    })
-                })
-                .collect()
-        };
+        let chunk_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &self.voxel_pipeline.chunk_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                    buffer: &self.chunk_uniform_buffer,
+                    offset: 0,
+                    size: wgpu::BufferSize::new(util::stride_of::<voxels::ChunkUniforms>() as u64),
+                }),
+            }],
+        });
 
         let mut render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: None,
@@ -334,10 +320,15 @@ impl Renderer {
 
             render_pass.set_pipeline(&self.voxel_pipeline.pipeline);
 
-            for (chunk, bind_group) in chunks.iter().zip(bind_groups.iter()) {
+            for (i, chunk) in chunks.iter().enumerate() {
                 {
                     puffin::profile_scope!("Record Render Pass");
-                    render_pass.set_bind_group(1, bind_group, &[]);
+                    render_pass.set_bind_group(
+                        1,
+                        &chunk_bind_group,
+                        &[(i * std::mem::size_of::<voxels::ChunkUniforms>())
+                            as wgpu::DynamicOffset],
+                    );
                     render_pass.set_vertex_buffer(0, chunk.voxel_mesh.buffer.slice(..));
                     render_pass.draw(0..chunk.voxel_mesh.count as u32, 0..1);
                 }

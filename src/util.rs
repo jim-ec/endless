@@ -34,7 +34,7 @@ pub const fn align(x: usize, align: usize) -> usize {
     (x + align - 1) & !(align - 1)
 }
 
-pub const fn stride<T>() -> usize {
+pub const fn stride_of<T>() -> usize {
     align(std::mem::size_of::<T>(), std::mem::align_of::<T>())
 }
 

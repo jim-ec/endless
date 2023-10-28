@@ -11,6 +11,7 @@ pub struct VoxelPipeline {
     pub(super) bind_group_layout: wgpu::BindGroupLayout,
     pub(super) bind_group: wgpu::BindGroup,
     pub(super) uniform_buffer: wgpu::Buffer,
+    pub(super) chunk_bind_group_layout: wgpu::BindGroupLayout,
 }
 
 #[repr(C)]
@@ -79,8 +80,10 @@ impl VoxelPipeline {
                     visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+                        has_dynamic_offset: true,
+                        min_binding_size: wgpu::BufferSize::new(
+                            util::stride_of::<ChunkUniforms>() as wgpu::BufferAddress
+                        ),
                     },
                     count: None,
                 }],
@@ -161,14 +164,14 @@ impl VoxelPipeline {
 
         let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            size: util::stride::<Uniforms>() as wgpu::BufferAddress,
+            size: util::stride_of::<Uniforms>() as wgpu::BufferAddress,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
-            layout: &chunk_bind_group_layout,
+            layout: &bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
                 resource: uniform_buffer.as_entire_binding(),
@@ -177,7 +180,8 @@ impl VoxelPipeline {
 
         Self {
             pipeline,
-            bind_group_layout: chunk_bind_group_layout,
+            bind_group_layout,
+            chunk_bind_group_layout,
             bind_group,
             uniform_buffer,
         }
