@@ -64,6 +64,8 @@ async fn run() {
     let mut lod_shift = 2;
     let mut lod_offset = 0;
     let mut enable_gizmos = false;
+    let mut invert_x_axis = false;
+    let mut invert_y_axis = false;
 
     let mut stats = renderer::RenderStats::default();
     let mut frame_time_counter = util::Counter::default();
@@ -181,8 +183,12 @@ async fn run() {
                 delta: MouseScrollDelta::PixelDelta(delta),
                 ..
             } => {
-                camera.yaw += camera.fovy * camera.up().z.signum() * 0.00008 * -delta.x as f32;
-                camera.pitch += camera.fovy * 0.00008 * -delta.y as f32;
+                camera.yaw += camera.fovy
+                    * camera.up().z.signum()
+                    * 0.00008
+                    * if invert_x_axis { delta.x } else { -delta.x } as f32;
+                camera.pitch +=
+                    camera.fovy * 0.00008 * if invert_y_axis { delta.y } else { -delta.y } as f32;
                 camera.pitch = camera.pitch.clamp(-0.25 * TAU, 0.25 * TAU);
             }
 
@@ -374,6 +380,11 @@ async fn run() {
                         .show(ui, |ui| {
                             ui.add(egui::Slider::new(&mut camera.fovy, 1.0..=180.0).text("FoV"));
                             ui.checkbox(&mut enable_gizmos, "Gizmos");
+                            ui.horizontal(|ui| {
+                                ui.label("Camera:");
+                                ui.checkbox(&mut invert_x_axis, "Invert X");
+                                ui.checkbox(&mut invert_y_axis, "Invert Y");
+                            });
                         });
                 });
 
