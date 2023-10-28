@@ -1,11 +1,11 @@
 struct Uniforms {
-    model: mat4x4<f32>,
     view: mat4x4<f32>,
     proj: mat4x4<f32>,
     light: vec3<f32>,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+@group(1) @binding(0) var<uniform> model: mat4x4<f32>;
 
 struct In {
     @location(0) position: vec3<f32>,
@@ -24,8 +24,9 @@ struct Out {
 fn vertex(in: In) -> Out {
     var out: Out;
 
-    out.clip_position = uniforms.proj * uniforms.view * uniforms.model * hom(in.position);
-    out.position = dehom(uniforms.model * hom(in.position));
+    let position = model * hom(in.position);
+    out.clip_position = uniforms.proj * uniforms.view * position;
+    out.position = dehom(position);
 
     out.color = unpack(in.color);
 

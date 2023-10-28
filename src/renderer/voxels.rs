@@ -1,6 +1,7 @@
 use crate::{
     field::{Field, Vis},
     symmetry::Symmetry,
+    util,
 };
 use cgmath::{vec3, InnerSpace, Matrix4, Quaternion, Vector3};
 use wgpu::util::DeviceExt;
@@ -8,16 +9,14 @@ use wgpu::util::DeviceExt;
 pub struct VoxelPipeline {
     pub(super) pipeline: wgpu::RenderPipeline,
     pub(super) bind_group_layout: wgpu::BindGroupLayout,
+    pub(super) bind_group: wgpu::BindGroup,
+    pub(super) uniform_buffer: wgpu::Buffer,
 }
 
-/// Uniforms for one chunk.
-/// Since we allocate a single buffer for chunk uniforms, the alignment
-/// needs to conform to [`wgpu::Limits::min_uniform_buffer_offset_alignment`].
 #[repr(C)]
-#[repr(align(256))]
+#[repr(align(16))]
 #[derive(Copy, Clone, Debug)]
 pub(super) struct Uniforms {
-    pub model: Matrix4<f32>,
     pub view: Matrix4<f32>,
     pub proj: Matrix4<f32>,
     pub light: Vector3<f32>,
@@ -25,6 +24,19 @@ pub(super) struct Uniforms {
 
 unsafe impl bytemuck::Pod for Uniforms {}
 unsafe impl bytemuck::Zeroable for Uniforms {}
+
+/// Uniforms for one chunk.
+/// Since we allocate a single buffer for chunk uniforms, the alignment
+/// needs to conform to [`wgpu::Limits::min_uniform_buffer_offset_alignment`].
+#[repr(C)]
+#[repr(align(256))]
+#[derive(Copy, Clone, Debug)]
+pub(super) struct ChunkUniforms {
+    pub model: Matrix4<f32>,
+}
+
+unsafe impl bytemuck::Pod for ChunkUniforms {}
+unsafe impl bytemuck::Zeroable for ChunkUniforms {}
 
 #[derive(Debug)]
 pub struct VoxelMesh {
@@ -59,6 +71,21 @@ impl VoxelPipeline {
             }],
         });
 
+        let chunk_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: None,
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
+
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
             source: wgpu::ShaderSource::Wgsl(
@@ -74,7 +101,7 @@ impl VoxelPipeline {
             label: None,
             layout: Some(
                 &device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    bind_group_layouts: &[&bind_group_layout],
+                    bind_group_layouts: &[&bind_group_layout, &chunk_bind_group_layout],
                     ..Default::default()
                 }),
             ),
@@ -132,9 +159,27 @@ impl VoxelPipeline {
             multiview: None,
         });
 
+        let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: util::stride::<Uniforms>() as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &chunk_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform_buffer.as_entire_binding(),
+            }],
+        });
+
         Self {
             pipeline,
-            bind_group_layout,
+            bind_group_layout: chunk_bind_group_layout,
+            bind_group,
+            uniform_buffer,
         }
     }
 }

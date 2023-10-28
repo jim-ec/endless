@@ -48,11 +48,14 @@ pub struct RenderStats {
 impl Renderer {
     pub async fn new(window: &Window) -> Self {
         let size = window.inner_size();
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::METAL,
+            dx12_shader_compiler: wgpu::Dx12Compiler::default(),
+        });
         let surface = unsafe { instance.create_surface(window) }.unwrap();
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::LowPower,
+                power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             })
@@ -97,8 +100,8 @@ impl Renderer {
         let chunk_uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
             size: (util::align(
-                std::mem::size_of::<voxels::Uniforms>(),
-                std::mem::align_of::<voxels::Uniforms>(),
+                std::mem::size_of::<voxels::ChunkUniforms>(),
+                std::mem::align_of::<voxels::ChunkUniforms>(),
             ) * MAX_VOXEL_UNIFORMS) as wgpu::BufferAddress,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
@@ -257,11 +260,11 @@ impl Renderer {
                             binding: 0,
                             resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                                 buffer: &self.chunk_uniform_buffer,
-                                offset: (i * std::mem::size_of::<voxels::Uniforms>())
+                                offset: (i * std::mem::size_of::<voxels::ChunkUniforms>())
                                     as wgpu::BufferAddress,
                                 size: Some(unsafe {
                                     wgpu::BufferSize::new_unchecked(std::mem::size_of::<
-                                        voxels::Uniforms,
+                                        voxels::ChunkUniforms,
                                     >(
                                     )
                                         as wgpu::BufferAddress)
@@ -301,13 +304,21 @@ impl Renderer {
         {
             puffin::profile_scope!("Update Uniform Buffer");
 
-            let uniforms: Vec<_> = chunks
-                .iter()
-                .map(|chunk| voxels::Uniforms {
-                    model: chunk.voxel_mesh.symmetry.matrix(),
+            self.queue.write_buffer(
+                &self.voxel_pipeline.uniform_buffer,
+                0,
+                bytemuck::cast_slice(&[voxels::Uniforms {
                     view: self.camera_symmetry.matrix(),
                     proj,
                     light: camera.translation,
+                }]),
+            );
+            render_pass.set_bind_group(0, &self.voxel_pipeline.bind_group, &[]);
+
+            let uniforms: Vec<_> = chunks
+                .iter()
+                .map(|chunk| voxels::ChunkUniforms {
+                    model: chunk.voxel_mesh.symmetry.matrix(),
                 })
                 .collect();
 
@@ -326,7 +337,7 @@ impl Renderer {
             for (chunk, bind_group) in chunks.iter().zip(bind_groups.iter()) {
                 {
                     puffin::profile_scope!("Record Render Pass");
-                    render_pass.set_bind_group(0, bind_group, &[]);
+                    render_pass.set_bind_group(1, bind_group, &[]);
                     render_pass.set_vertex_buffer(0, chunk.voxel_mesh.buffer.slice(..));
                     render_pass.draw(0..chunk.voxel_mesh.count as u32, 0..1);
                 }

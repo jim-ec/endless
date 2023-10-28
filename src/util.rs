@@ -30,8 +30,12 @@ pub fn rgb(r: usize, g: usize, b: usize) -> Vector3<f32> {
     vec3(r, g, b).map(|x| x as f32 / 255.0)
 }
 
-pub fn align(x: usize, align: usize) -> usize {
+pub const fn align(x: usize, align: usize) -> usize {
     (x + align - 1) & !(align - 1)
+}
+
+pub const fn stride<T>() -> usize {
+    align(std::mem::size_of::<T>(), std::mem::align_of::<T>())
 }
 
 pub struct Counter {
