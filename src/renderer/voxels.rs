@@ -229,10 +229,7 @@ impl VoxelMesh {
                             CUBE_VERTICES[k as usize],
                         ];
                         let normal = (vs[2] - vs[0]).cross(vs[1] - vs[0]).normalize();
-                        let color = color[[x, y, z]];
-                        let color = ((color.x * 255.0) as u32) << 16
-                            | ((color.y * 255.0) as u32) << 8
-                            | ((color.z * 255.0) as u32);
+                        let color = util::pack(color[[x, y, z]]);
                         vertices.extend(vs.into_iter().map(|v| Vertex {
                             position: position + v,
                             normal,

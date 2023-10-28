@@ -21,10 +21,32 @@ unsafe impl bytemuck::Pod for Uniforms {}
 unsafe impl bytemuck::Zeroable for Uniforms {}
 
 #[derive(Clone, Copy, Debug)]
-struct Gizmo(Vector3<f32>, Vector3<f32>);
+struct Vertex {
+    position: [f32; 4],
+    color: u32,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Gizmo([Vertex; 2]);
 
 unsafe impl bytemuck::Pod for Gizmo {}
 unsafe impl bytemuck::Zeroable for Gizmo {}
+
+impl Gizmo {
+    fn new(a: Vector3<f32>, b: Vector3<f32>, color: Vector3<f32>) -> Self {
+        let color = util::pack(color);
+        Self([
+            Vertex {
+                position: [a.x, a.y, a.z, 1.0],
+                color,
+            },
+            Vertex {
+                position: [b.x, b.y, b.z, 1.0],
+                color,
+            },
+        ])
+    }
+}
 
 impl Gizmos {
     pub fn new(
@@ -93,13 +115,20 @@ impl Gizmos {
                 module: &shader,
                 entry_point: "vertex",
                 buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: std::mem::size_of::<Vector3<f32>>() as wgpu::BufferAddress,
+                    array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &[wgpu::VertexAttribute {
-                        offset: 0,
-                        shader_location: 0,
-                        format: wgpu::VertexFormat::Float32x4,
-                    }],
+                    attributes: &[
+                        wgpu::VertexAttribute {
+                            offset: memoffset::offset_of!(Vertex, position) as wgpu::BufferAddress,
+                            shader_location: 0,
+                            format: wgpu::VertexFormat::Float32x4,
+                        },
+                        wgpu::VertexAttribute {
+                            offset: memoffset::offset_of!(Vertex, color) as wgpu::BufferAddress,
+                            shader_location: 1,
+                            format: wgpu::VertexFormat::Uint32,
+                        },
+                    ],
                 }],
             },
             fragment: Some(wgpu::FragmentState {
@@ -140,43 +169,51 @@ impl Gizmos {
         }
     }
 
-    pub fn aabb(&mut self, min: Vector3<f32>, max: Vector3<f32>) {
+    pub fn aabb(&mut self, min: Vector3<f32>, max: Vector3<f32>, color: Vector3<f32>) {
         self.gizmos.extend([
-            Gizmo(min, Vector3::new(min.x, min.y, max.z)),
-            Gizmo(
+            Gizmo::new(min, Vector3::new(min.x, min.y, max.z), color),
+            Gizmo::new(
                 Vector3::new(min.x, min.y, max.z),
                 Vector3::new(max.x, min.y, max.z),
+                color,
             ),
-            Gizmo(
+            Gizmo::new(
                 Vector3::new(max.x, min.y, max.z),
                 Vector3::new(max.x, min.y, min.z),
+                color,
             ),
-            Gizmo(Vector3::new(max.x, min.y, min.z), min),
-            Gizmo(
+            Gizmo::new(Vector3::new(max.x, min.y, min.z), min, color),
+            Gizmo::new(
                 Vector3::new(min.x, max.y, min.z),
                 Vector3::new(min.x, max.y, max.z),
+                color,
             ),
-            Gizmo(Vector3::new(min.x, max.y, max.z), max),
-            Gizmo(max, Vector3::new(max.x, max.y, min.z)),
-            Gizmo(
+            Gizmo::new(Vector3::new(min.x, max.y, max.z), max, color),
+            Gizmo::new(max, Vector3::new(max.x, max.y, min.z), color),
+            Gizmo::new(
                 Vector3::new(max.x, max.y, min.z),
                 Vector3::new(min.x, max.y, min.z),
+                color,
             ),
-            Gizmo(
+            Gizmo::new(
                 Vector3::new(min.x, min.y, min.z),
                 Vector3::new(min.x, max.y, min.z),
+                color,
             ),
-            Gizmo(
+            Gizmo::new(
                 Vector3::new(min.x, min.y, max.z),
                 Vector3::new(min.x, max.y, max.z),
+                color,
             ),
-            Gizmo(
+            Gizmo::new(
                 Vector3::new(max.x, min.y, max.z),
                 Vector3::new(max.x, max.y, max.z),
+                color,
             ),
-            Gizmo(
+            Gizmo::new(
                 Vector3::new(max.x, min.y, min.z),
                 Vector3::new(max.x, max.y, min.z),
+                color,
             ),
         ]);
     }

@@ -498,6 +498,7 @@ async fn run() {
                     renderer.gizmos.aabb(
                         N as f32 * key.cast().unwrap(),
                         N as f32 * (key + vec3(1, 1, 1)).cast().unwrap(),
+                        util::rgb(0, 255, 0),
                     );
                 }
             }
