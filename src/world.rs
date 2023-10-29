@@ -99,11 +99,14 @@ impl Chunk {
             Field::new(extent, |[x, y, z]| sediments[[x, y, z]] != Sediment::Air)
         };
 
-        let color = sediments.map(|s| match s {
-            Sediment::Rock => rgb(50, 40, 50),
-            Sediment::Grass => rgb(120, 135, 5),
-            Sediment::Air => rgb(0, 0, 0),
-        });
+        let color = {
+            puffin::profile_scope!("Color");
+            sediments.map(|s| match s {
+                Sediment::Rock => rgb(50, 40, 50),
+                Sediment::Grass => rgb(120, 135, 5),
+                Sediment::Air => rgb(0, 0, 0),
+            })
+        };
 
         let env = {
             puffin::profile_scope!("Env");
@@ -114,7 +117,7 @@ impl Chunk {
             mask.shell(&env)
         };
         let vis = {
-            puffin::profile_scope!("Shell");
+            puffin::profile_scope!("Visibility");
             env.visibility()
         };
         let voxel_mesh = {
