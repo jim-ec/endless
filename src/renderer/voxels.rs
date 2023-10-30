@@ -46,11 +46,15 @@ pub struct VoxelMesh {
     pub(super) count: usize,
 }
 
+#[derive(Clone, Copy, Debug)]
 struct Vertex {
     position: Vector3<f32>,
     normal: Vector3<f32>,
     color: u32,
 }
+
+unsafe impl bytemuck::Pod for Vertex {}
+unsafe impl bytemuck::Zeroable for Vertex {}
 
 impl VoxelPipeline {
     pub fn new(
@@ -242,12 +246,7 @@ impl VoxelMesh {
 
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
-            contents: unsafe {
-                std::slice::from_raw_parts(
-                    vertices.as_ptr() as *const u8,
-                    vertices.len() * std::mem::size_of::<Vertex>(),
-                )
-            },
+            contents: bytemuck::cast_slice(&vertices),
             usage: wgpu::BufferUsages::VERTEX,
         });
 
