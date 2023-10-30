@@ -183,10 +183,8 @@ async fn run() {
                 delta: MouseScrollDelta::PixelDelta(delta),
                 ..
             } => {
-                camera.yaw += camera.fovy
-                    * camera.up().z.signum()
-                    * 0.00008
-                    * if invert_x_axis { delta.x } else { -delta.x } as f32;
+                camera.yaw +=
+                    camera.fovy * 0.00008 * if invert_x_axis { delta.x } else { -delta.x } as f32;
                 camera.pitch +=
                     camera.fovy * 0.00008 * if invert_y_axis { delta.y } else { -delta.y } as f32;
                 camera.pitch = camera.pitch.clamp(-0.25 * TAU, 0.25 * TAU);
@@ -248,13 +246,13 @@ async fn run() {
                 translation += camera.forward();
             }
             if w_down && alt_down {
-                translation.z += camera.up().z.signum();
+                translation.z += 1.0;
             }
             if s_down && !alt_down {
                 translation -= camera.forward();
             }
             if s_down && alt_down {
-                translation.z -= camera.up().z.signum();
+                translation.z -= 1.0;
             }
             if a_down {
                 translation += camera.left();
