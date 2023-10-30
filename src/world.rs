@@ -1,13 +1,9 @@
 use std::collections::HashMap;
 
-use cgmath::Vector3;
+use cgmath::{vec3, Vector3};
 use noise::NoiseFn;
 
-use crate::{
-    field::Field,
-    renderer::voxels::VoxelMesh,
-    util::{rescale, rgb},
-};
+use crate::{field::Field, renderer::voxels::VoxelMesh, util::rescale};
 
 pub const K: usize = 6;
 pub const N: usize = 1 << K;
@@ -27,7 +23,6 @@ impl Chunk {
         puffin::profile_function!();
 
         let noise = {
-            puffin::profile_scope!("Noise");
             use noise::{Fbm, Perlin, Turbulence};
             let mut noise = Fbm::<Perlin>::new(0);
             noise.frequency = 0.01;
@@ -38,13 +33,6 @@ impl Chunk {
         let scale = 1 << lod;
 
         let offset = N as isize * key.cast().unwrap();
-
-        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-        enum Sediment {
-            Rock,
-            Grass,
-            Air,
-        }
 
         let height = {
             puffin::profile_scope!("Height");
@@ -58,7 +46,7 @@ impl Chunk {
 
                 let mut n = noise.get([x as f64, y as f64]) as f32;
                 n = rescale(n, -1.0..1.0, -0.2..1.0);
-                n = n.abs().powf(1.5).copysign(n);
+                n = n.abs().powf(1.2).copysign(n);
                 n *= 50.0;
                 n -= z;
 
@@ -66,13 +54,8 @@ impl Chunk {
             })
         };
 
-        let blurred_normal = {
-            puffin::profile_scope!("Blurred Normal");
-            height.normal().map(|v| v.z).blur(3.0)
-        };
-
-        let sediments = {
-            puffin::profile_scope!("Sediments");
+        let mask = {
+            puffin::profile_scope!("Mask");
             Field::new(extent, |[i, j, k]| {
                 // Compute world-space coordinates
                 let [_x, _y, z] = [
@@ -81,30 +64,7 @@ impl Chunk {
                     (k << lod) as f32 + offset.z as f32,
                 ];
 
-                let rock = height[[i, j]];
-                let grass = 3.0 * blurred_normal[[i, j]];
-
-                if z <= rock.ceil() {
-                    Sediment::Rock
-                } else if z <= rock.ceil() + grass {
-                    Sediment::Grass
-                } else {
-                    Sediment::Air
-                }
-            })
-        };
-
-        let mask = {
-            puffin::profile_scope!("Mask");
-            Field::new(extent, |[x, y, z]| sediments[[x, y, z]] != Sediment::Air)
-        };
-
-        let color = {
-            puffin::profile_scope!("Color");
-            sediments.map(|s| match s {
-                Sediment::Rock => rgb(50, 40, 50),
-                Sediment::Grass => rgb(120, 135, 5),
-                Sediment::Air => rgb(0, 0, 0),
+                z <= height[[i, j]]
             })
         };
 
@@ -120,6 +80,13 @@ impl Chunk {
             puffin::profile_scope!("Visibility");
             env.visibility()
         };
+
+        let color = {
+            puffin::profile_scope!("Color");
+            vis.normals()
+                .map(|n| 0.67 * (0.5 * n + vec3(0.5, 0.5, 0.5)))
+        };
+
         let voxel_mesh = {
             puffin::profile_scope!("Voxel Mesh");
             VoxelMesh::new(

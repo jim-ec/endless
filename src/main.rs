@@ -87,6 +87,8 @@ async fn run() {
     let mut frame_time_counter = util::Counter::default();
     let mut show_profiler = false;
 
+    let chunk_generation_time = Arc::new(Mutex::new(0.0));
+
     #[derive(Default)]
     struct Tasks {
         task_list: HashMap<Vector3<isize>, usize>,
@@ -100,6 +102,7 @@ async fn run() {
         let tasks = tasks.clone();
         let player_cell = player_cell.clone();
         let chunk_sender = chunk_sender.clone();
+        let chunk_generation_time = chunk_generation_time.clone();
         thread::Builder::new()
             .name(format!("Worker #{i}"))
             .spawn(move || loop {
@@ -133,7 +136,13 @@ async fn run() {
                 };
 
                 // Generate the chunk. This can take a long time.
+                let start = Instant::now();
                 let chunk = world::Chunk::new(key, lod, &device);
+                let elapsed = start.elapsed().as_millis();
+                if lod == 0 {
+                    let mut chunk_generation_time = chunk_generation_time.lock();
+                    *chunk_generation_time = 0.9 * *chunk_generation_time + 0.1 * elapsed as f32;
+                }
 
                 {
                     // Check if the task is still valid
@@ -378,10 +387,13 @@ async fn run() {
                         .default_open(true)
                         .show(ui, |ui| {
                             ui.label(format!("Side Extent: {N}"));
-                            ui.label(format!("In Progress: {}", tasks.lock().in_progress.len()));
                             ui.label(format!("Total: {}", world.chunks.len()));
                             ui.label(format!("Rendered: {}", stats.chunk_count));
                             ui.label(format!("Generation Radius: {}", max_lod << lod_shift));
+                            ui.label(format!(
+                                "Generation Time: {:.0}ms",
+                                *chunk_generation_time.lock()
+                            ));
                             ui.add(egui::Slider::new(&mut max_lod, 0..=K).text("Max LoD"));
                             ui.add(egui::Slider::new(&mut lod_shift, 0..=6).text("LoD Exp Scale"));
                         });
