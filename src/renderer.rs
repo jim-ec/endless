@@ -38,7 +38,7 @@ pub struct Renderer {
     chunk_uniform_buffer: wgpu::Buffer,
 }
 
-const MAX_VOXEL_UNIFORMS: usize = 4096;
+const MAX_VOXEL_UNIFORMS: usize = 8192;
 
 #[derive(Default)]
 pub struct RenderStats {
