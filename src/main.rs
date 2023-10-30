@@ -15,16 +15,15 @@ use std::collections::HashMap;
 use std::f32::consts::TAU;
 use std::sync::{mpsc, Arc};
 use std::thread;
-use std::{
-    collections::HashSet,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
 use world::{Chunk, N};
+
+use crate::world::K;
 
 pub const FRAME_TIME: f32 = 1.0 / 60.0;
 
@@ -60,9 +59,8 @@ async fn run() {
 
     let (chunk_sender, chunk_receiver) = mpsc::channel::<(Vector3<isize>, Chunk)>();
     let mut world = world::World::default();
-    let mut generation_radius = 7;
+    let mut max_lod = K >> 1;
     let mut lod_shift = 2;
-    let mut lod_offset = 0;
     let mut enable_gizmos = false;
     let mut invert_x_axis = false;
     let mut invert_y_axis = false;
@@ -365,12 +363,9 @@ async fn run() {
                             ui.label(format!("In Progress: {}", tasks.lock().in_progress.len()));
                             ui.label(format!("Total: {}", world.chunks.len()));
                             ui.label(format!("Rendered: {}", stats.chunk_count));
-                            ui.add(
-                                egui::Slider::new(&mut generation_radius, 1..=36)
-                                    .text("Generation Radius"),
-                            );
-                            ui.add(egui::Slider::new(&mut lod_offset, 0..=4).text("LoD Offset"));
-                            ui.add(egui::Slider::new(&mut lod_shift, 0..=4).text("LoD Exp Scale"));
+                            ui.label(format!("Generation Radius: {}", max_lod << lod_shift));
+                            ui.add(egui::Slider::new(&mut max_lod, 0..=K).text("Max LoD"));
+                            ui.add(egui::Slider::new(&mut lod_shift, 0..=6).text("LoD Exp Scale"));
                         });
 
                     egui::CollapsingHeader::new("Misc")
@@ -438,30 +433,29 @@ async fn run() {
                 world.chunks.insert(key, chunk);
             }
 
-            let mut required_chunks = HashSet::new();
+            let mut required_chunks = HashMap::new();
 
             *player_cell.lock() = camera_index;
 
-            // Delete chunks that are outside the generation radius
-            world.chunks.retain(|&key, _| {
-                let d = (key - camera_index).map(isize::abs);
-                d.x <= generation_radius && d.y <= generation_radius
-            });
-
             // Gather all required chunks and their LoDs based on the camera position
+            let generation_radius = (K << lod_shift) as isize;
             for x in -generation_radius..=generation_radius {
                 for y in -generation_radius..=generation_radius {
                     for z in 0..=1 {
                         let c = vec3(camera_index.x + x, camera_index.y + y, z);
-                        let lod = x.unsigned_abs() + y.unsigned_abs();
+                        let lod = ((x.pow(2) + y.pow(2)) as f32).sqrt() as usize;
                         let lod = lod >> lod_shift;
-                        let lod = lod.saturating_sub(lod_offset);
-                        if (N >> lod) > 0 {
-                            required_chunks.insert((c, lod));
+                        if lod <= max_lod {
+                            required_chunks.insert(c, lod);
                         }
                     }
                 }
             }
+
+            // Delete chunks that are outside the generation radius
+            world
+                .chunks
+                .retain(|key, _| required_chunks.contains_key(key));
 
             // Record new chunk generation tasks
             {
@@ -472,7 +466,7 @@ async fn run() {
                 // Cancel outdated tasks which are not yet in progress
                 tasks
                     .task_list
-                    .retain(|key, lod| required_chunks.contains(&(*key, *lod)));
+                    .retain(|key, lod| required_chunks.get(key).copied() == Some(*lod));
 
                 for (key, lod) in required_chunks {
                     // Check if the task is already in progress
