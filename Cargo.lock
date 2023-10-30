@@ -222,6 +222,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bmp"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69985ff4f58085ac696454692d0b646a66ad1f9cc9be294c91dc51bb5df511ae"
+dependencies = [
+ "byteorder",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -506,6 +515,7 @@ name = "endless"
 version = "0.1.0"
 dependencies = [
  "bitflags 2.4.1",
+ "bmp",
  "bytemuck",
  "cgmath",
  "derive_setters",

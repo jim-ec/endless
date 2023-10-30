@@ -20,6 +20,7 @@ egui = "0.23.0"
 egui-wgpu = "0.23.0"
 puffin = "0.17.0"
 puffin_egui = "0.23.0"
+bmp = "0.5.0"
 
 [profile.dev]
 debug = true

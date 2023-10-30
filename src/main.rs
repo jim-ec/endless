@@ -33,6 +33,24 @@ fn main() {
 
 async fn run() {
     env_logger::init();
+
+    // {
+    //     let n = 256;
+    //     let mut img = bmp::Image::new(n, n);
+    //     for i in 0..n {
+    //         for j in 0..n {
+    //             let x = j as f32;
+    //             let y = i as f32;
+
+    //             let g = util::random(x, y);
+    //             let g = (g * 255.0) as u8;
+    //             img.set_pixel(j, i, bmp::Pixel::new(g, g, g));
+    //         }
+    //     }
+    //     img.save("noise.bmp").unwrap();
+    //     return;
+    // }
+
     puffin::set_scopes_on(true);
 
     let mut last_render_time = Instant::now();

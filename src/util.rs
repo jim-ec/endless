@@ -73,3 +73,32 @@ impl Counter {
 pub fn pack(color: Vector3<f32>) -> u32 {
     ((color.x * 255.0) as u32) << 16 | ((color.y * 255.0) as u32) << 8 | ((color.z * 255.0) as u32)
 }
+
+pub fn xoshiro128(s: &mut [u32; 4]) -> u32 {
+    let result = s[0].wrapping_add(s[3]);
+    let t = s[1] << 9;
+    s[2] ^= s[0];
+    s[3] ^= s[1];
+    s[1] ^= s[2];
+    s[0] ^= s[3];
+    s[2] ^= t;
+    s[3] = s[3].rotate_left(11);
+    result
+}
+
+pub fn random(x: f32, y: f32) -> f32 {
+    fn f(x: f32, y: f32) -> f32 {
+        let x = (2523.4 * x).sin();
+        // let x = (5084.4 * x).sin();
+        let y = (8147.23 * y).sin();
+        // let y = (9323.23 * y).sin();
+        let g = 43758.53 * x + 23421.63 * y;
+        g.fract()
+    }
+
+    let tx = f(x, y);
+    let ty = f(y, x);
+    let rx = f(tx, ty);
+    let ry = f(ty, tx);
+    f(x + 23.0 * rx, y + 17.0 * ry)
+}

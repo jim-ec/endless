@@ -1,6 +1,7 @@
 target
 
 flamegraph.svg
+noise.bmp
 
 .DS_Store
 .desktop.ini
