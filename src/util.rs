@@ -71,7 +71,7 @@ impl Counter {
 }
 
 pub fn pack(color: Vector3<f32>) -> u32 {
-    ((color.x * 255.0) as u32) << 16 | ((color.y * 255.0) as u32) << 8 | ((color.z * 255.0) as u32)
+    ((color.x * 255.0) as u32) | ((color.y * 255.0) as u32) << 8 | ((color.z * 255.0) as u32) << 16
 }
 
 pub fn xoshiro128(s: &mut [u32; 4]) -> u32 {

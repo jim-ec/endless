@@ -19,7 +19,7 @@ struct Out {
 fn vertex(in: In) -> Out {
     var out: Out;
     out.clip_position = uniforms.proj * uniforms.view * hom(in.position);
-    out.color = unpack(in.color);
+    out.color = unpack4x8unorm(in.color).rgb;
     return out;
 }
 

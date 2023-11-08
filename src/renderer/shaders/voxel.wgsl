@@ -28,7 +28,7 @@ fn vertex(in: In) -> Out {
     out.clip_position = uniforms.proj * uniforms.view * position;
     out.position = dehom(position);
 
-    out.color = unpack(in.color);
+    out.color = unpack4x8unorm(in.color).rgb;
 
     out.normal = in.normal;
 
