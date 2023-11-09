@@ -1,9 +1,10 @@
 use std::{
+    f32::consts::TAU,
     ops::{Add, Div, Mul, Range, Sub},
     time::Instant,
 };
 
-use cgmath::{vec2, vec3, InnerSpace, Vector3};
+use cgmath::{vec2, vec3, InnerSpace, Vector2, Vector3};
 
 pub fn profile<R>(label: &str, f: impl FnOnce() -> R) -> R {
     let t0 = Instant::now();
@@ -98,11 +99,12 @@ pub fn hash(keys: impl IntoIterator<Item = u32>) -> u32 {
     }
 
     let mut state = [hash; 4];
-    const ITER: usize = 4;
+    const ITER: usize = 3;
     for _ in 0..ITER {
         xoshiro128(&mut state);
     }
-    xoshiro128(&mut state)
+
+    state[0].wrapping_add(state[3])
 }
 
 /// Generate a pseudo-random number in [0, 1) by hashing the given keys.
@@ -130,4 +132,41 @@ pub fn random_signed(keys: impl IntoIterator<Item = f32>) -> f32 {
     bits = f32::to_bits(f32::from_bits(bits) - 1.0);
     bits |= k & 0x80000000;
     f32::from_bits(bits)
+}
+
+/// Perlin noise in 2D, outputting values in the range (-1, 1).
+pub fn perlin(p: Vector2<f32>) -> f32 {
+    let p0 = p.map(f32::floor);
+    let p1 = p0 + Vector2::new(1.0, 0.0);
+    let p2 = p0 + Vector2::new(0.0, 1.0);
+    let p3 = p0 + Vector2::new(1.0, 1.0);
+
+    // Gradient direction vectors
+    let d0 = TAU * random([p0.x, p0.y]);
+    let d1 = TAU * random([p1.x, p1.y]);
+    let d2 = TAU * random([p2.x, p2.y]);
+    let d3 = TAU * random([p3.x, p3.y]);
+
+    // Gradient vectors
+    let g0 = vec2(d0.cos(), d0.sin());
+    let g1 = vec2(d1.cos(), d1.sin());
+    let g2 = vec2(d2.cos(), d2.sin());
+    let g3 = vec2(d3.cos(), d3.sin());
+
+    // Interpolate so that the first and second derivative is zero at the end points.
+    fn interpolate(a: f32, b: f32, t: f32) -> f32 {
+        ((t * (t * 6.0 - 15.0) + 10.0) * t * t * t) * (b - a) + a
+    }
+
+    let delta = p - p0;
+
+    let i = (p - p0).dot(g0);
+    let j = (p - p1).dot(g1);
+    let k = (p - p2).dot(g2);
+    let l = (p - p3).dot(g3);
+
+    let u = interpolate(i, j, delta.x);
+    let v = interpolate(k, l, delta.x);
+
+    interpolate(u, v, delta.y)
 }
