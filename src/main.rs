@@ -7,7 +7,7 @@ mod symmetry;
 mod util;
 mod world;
 
-use cgmath::{vec3, InnerSpace, Vector3, Zero};
+use cgmath::{vec2, vec3, InnerSpace, Vector3, Zero};
 use egui::mutex::Mutex;
 use itertools::Itertools;
 use pollster::FutureExt;
@@ -31,25 +31,72 @@ fn main() {
     run().block_on()
 }
 
+fn perlin(x: f32, y: f32) -> f32 {
+    fn gradient_dot_delta(ix: f32, iy: f32, x: f32, y: f32) -> f32 {
+        let dir = TAU * util::random([ix, iy]);
+        // println!("[{ix},{iy}] => {dir:?}");
+        let gradient = vec2(dir.cos(), dir.sin());
+        let delta = vec2(x - ix, y - iy);
+        delta.dot(gradient)
+    }
+
+    fn interpolate(a0: f32, a1: f32, w: f32) -> f32 {
+        (a1 - a0) * ((w * (w * 6.0 - 15.0) + 10.0) * w * w * w) + a0
+    }
+
+    let x0 = x.floor();
+    let y0 = y.floor();
+    let x1 = x0 + 1.0;
+    let y1 = y0 + 1.0;
+
+    let sx = x - x0;
+    let sy = y - y0;
+
+    let n0 = gradient_dot_delta(x0, y0, x, y);
+    let n1 = gradient_dot_delta(x1, y0, x, y);
+    let ix0 = interpolate(n0, n1, sx);
+
+    let n0 = gradient_dot_delta(x0, y1, x, y);
+    let n1 = gradient_dot_delta(x1, y1, x, y);
+    let ix1 = interpolate(n0, n1, sx);
+
+    interpolate(ix0, ix1, sy)
+}
+
 async fn run() {
+    // TODO: Remove
+    #![allow(unreachable_code)]
+    #![allow(unused_variables)]
+
     env_logger::init();
 
-    // {
-    //     let n = 256;
-    //     let mut img = bmp::Image::new(n, n);
-    //     for i in 0..n {
-    //         for j in 0..n {
-    //             let x = j as f32;
-    //             let y = i as f32;
+    {
+        let scale = 10.0;
+        let extent = 250;
+        let mut img = bmp::Image::new(extent, extent);
+        for i in 0..extent {
+            for j in 0..extent {
+                let x = scale * j as f32 + 0.5;
+                let y = scale * i as f32 + 0.5;
 
-    //             let g = util::random(x, y);
-    //             let g = (g * 255.0) as u8;
-    //             img.set_pixel(j, i, bmp::Pixel::new(g, g, g));
-    //         }
-    //     }
-    //     img.save("noise.bmp").unwrap();
-    //     return;
-    // }
+                // let g = perlin(x, y);
+                // let g = g * 0.5 + 0.5;
+                // assert!((0.0..1.0).contains(&g), "{g}");
+                // dbg!(g);
+
+                let g = util::random([f32::from_bits(i), f32::from_bits(j)]);
+
+                let g = g * u8::MAX as f32;
+
+                // let g = g as f64 / u32::MAX as f64;
+                // let g = (g * 255.0) as u8;
+                let g = g as u8;
+                img.set_pixel(j, i, bmp::Pixel::new(g, g, g));
+            }
+        }
+        img.save("noise.bmp").unwrap();
+        return;
+    }
 
     puffin::set_scopes_on(true);
 

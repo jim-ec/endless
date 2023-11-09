@@ -3,7 +3,7 @@ use std::{
     time::Instant,
 };
 
-use cgmath::{vec3, Vector3};
+use cgmath::{vec2, vec3, InnerSpace, Vector3};
 
 pub fn profile<R>(label: &str, f: impl FnOnce() -> R) -> R {
     let t0 = Instant::now();
@@ -86,19 +86,48 @@ pub fn xoshiro128(s: &mut [u32; 4]) -> u32 {
     result
 }
 
-pub fn random(x: f32, y: f32) -> f32 {
-    fn f(x: f32, y: f32) -> f32 {
-        let x = (2523.4 * x).sin();
-        // let x = (5084.4 * x).sin();
-        let y = (8147.23 * y).sin();
-        // let y = (9323.23 * y).sin();
-        let g = 43758.53 * x + 23421.63 * y;
-        g.fract()
+pub fn knuth(n: u32) -> u32 {
+    const KNUTH: u32 = 2654435769;
+    (n.wrapping_mul(KNUTH)).rotate_right(17)
+}
+
+pub fn hash(keys: impl IntoIterator<Item = u32>) -> u32 {
+    let mut hash = 0;
+    for key in keys {
+        hash = knuth(hash ^ key);
     }
 
-    let tx = f(x, y);
-    let ty = f(y, x);
-    let rx = f(tx, ty);
-    let ry = f(ty, tx);
-    f(x + 23.0 * rx, y + 17.0 * ry)
+    let mut state = [hash; 4];
+    const ITER: usize = 4;
+    for _ in 0..ITER {
+        xoshiro128(&mut state);
+    }
+    xoshiro128(&mut state)
+}
+
+/// Generate a pseudo-random number in [0, 1) by hashing the given keys.
+pub fn random(keys: impl IntoIterator<Item = f32>) -> f32 {
+    let k = hash(keys.into_iter().map(f32::to_bits));
+    // Construct a positive floating point with 0 in the exponent.
+    // This is effectively the bits representing positive one.
+    let mut bits = 0x3F800000;
+    // Fill the mantissa from a substring of the hash.
+    // This will yield some number in [0, 1)
+    bits |= k & 0x007FFFFF;
+    f32::from_bits(bits) - 1.0
+}
+
+/// Generate a pseudo-random number in (-1, 1) by hashing the given keys.
+pub fn random_signed(keys: impl IntoIterator<Item = f32>) -> f32 {
+    let k = hash(keys.into_iter().map(f32::to_bits));
+    // Construct a positive floating point with 0 in the exponent.
+    // This is effectively the bits representing positive one.
+    let mut bits = 0x3F800000;
+    // Fill the mantissa from a substring of the hash.
+    // This will yield some number in [0, 1)
+    bits |= k & 0x007FFFFF;
+    // Fill the sign bit from the hash.
+    bits = f32::to_bits(f32::from_bits(bits) - 1.0);
+    bits |= k & 0x80000000;
+    f32::from_bits(bits)
 }
