@@ -170,3 +170,10 @@ pub fn perlin(p: Vector2<f32>) -> f32 {
 
     interpolate(u, v, delta.y)
 }
+
+pub fn warp(p: Vector2<f32>) -> f32 {
+    const AMPLITUDE: f32 = 5.0;
+    let d = perlin(p);
+    let t = AMPLITUDE * vec2(d.cos(), d.sin());
+    perlin(p + t)
+}
