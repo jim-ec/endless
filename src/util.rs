@@ -171,9 +171,11 @@ pub fn perlin(p: Vector2<f32>) -> f32 {
     interpolate(u, v, delta.y)
 }
 
-pub fn warp(p: Vector2<f32>) -> f32 {
+type NoiseFn = fn(Vector2<f32>) -> f32;
+
+pub fn warp(p: Vector2<f32>, f: NoiseFn) -> f32 {
     const AMPLITUDE: f32 = 5.0;
-    let d = perlin(p);
+    let d = f(p);
     let t = AMPLITUDE * vec2(d.cos(), d.sin());
     perlin(p + t)
 }
@@ -200,4 +202,22 @@ pub fn worley(p: Vector2<f32>) -> f32 {
     }
 
     min
+}
+
+pub fn fbm(p: Vector2<f32>, f: NoiseFn) -> f32 {
+    const OCTAVES: usize = 8;
+    const LACUNARITY: f32 = 2.0;
+    const GAIN: f32 = 0.5;
+
+    let mut amplitude = 1.0;
+    let mut frequency = 1.0;
+    let mut sum = 0.0;
+
+    for _ in 0..OCTAVES {
+        sum += amplitude * f(p * frequency);
+        amplitude *= GAIN;
+        frequency *= LACUNARITY;
+    }
+
+    sum
 }
