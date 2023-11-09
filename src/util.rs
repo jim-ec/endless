@@ -4,7 +4,7 @@ use std::{
     time::Instant,
 };
 
-use cgmath::{vec2, vec3, InnerSpace, Vector2, Vector3};
+use cgmath::{vec2, vec3, InnerSpace, MetricSpace, Vector2, Vector3};
 
 pub fn profile<R>(label: &str, f: impl FnOnce() -> R) -> R {
     let t0 = Instant::now();
@@ -176,4 +176,28 @@ pub fn warp(p: Vector2<f32>) -> f32 {
     let d = perlin(p);
     let t = AMPLITUDE * vec2(d.cos(), d.sin());
     perlin(p + t)
+}
+
+pub fn worley(p: Vector2<f32>) -> f32 {
+    let h = p.map(f32::floor);
+    let cells = [
+        h + vec2(-1.0, -1.0),
+        h + vec2(0.0, -1.0),
+        h + vec2(1.0, -1.0),
+        h + vec2(-1.0, 0.0),
+        h + vec2(0.0, 0.0),
+        h + vec2(1.0, 0.0),
+        h + vec2(-1.0, 1.0),
+        h + vec2(0.0, 1.0),
+        h + vec2(1.0, 1.0),
+    ];
+
+    let seeds = cells.map(|c| c + vec2(random([c.x, c.y]), random([c.x, c.y])));
+
+    let mut min = f32::INFINITY;
+    for seed in seeds {
+        min = min.min(seed.distance(p));
+    }
+
+    min
 }

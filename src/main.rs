@@ -48,9 +48,10 @@ async fn run() {
                 let y = scale * i as f32 + 0.5;
 
                 // let g = util::random([f32::from_bits(i), f32::from_bits(j)]);
-                let g = util::warp(vec2(x, y));
+                let g = util::worley(vec2(x, y));
                 let g = g.sin();
-                let g = g * 0.5 + 0.5;
+                // let g = g * 0.5 + 0.5;
+                assert!((0.0..1.0).contains(&g));
 
                 let g = g * u8::MAX as f32;
 
