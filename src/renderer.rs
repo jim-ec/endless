@@ -48,10 +48,7 @@ pub struct RenderStats {
 impl Renderer {
     pub async fn new(window: &Window) -> Self {
         let size = window.inner_size();
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::METAL,
-            dx12_shader_compiler: wgpu::Dx12Compiler::default(),
-        });
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
         let surface = unsafe { instance.create_surface(window) }.unwrap();
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
