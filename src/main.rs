@@ -65,7 +65,7 @@ async fn run() {
             }
         }
         img.save("noise.bmp").unwrap();
-        return;
+        // return;
     }
 
     puffin::set_scopes_on(true);
