@@ -1,6 +1,18 @@
 # Endless
 
-## Declarative terrain generation
+Voxel generation
+
+![figure](figure.png)
+
+Controls:
+
+- `W`, `A`, `S`, `D` to move
+- `⌥` + `W`, `⌥` + `S` to move up and down
+- Combine with `⇧` to move faster
+- `⌘` + `Q` to quit
+
+
+## WIP: Declarative terrain generation
 
 - Abstracts lodding away
 - Compiled to a computer shader
